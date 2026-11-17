@@ -1,0 +1,21 @@
+# Local Postgres for development and the db test suite.
+# Port 5434 so it does not collide with other local Postgres instances.
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: bill_postgres
+    environment:
+      POSTGRES_USER: bill
+      POSTGRES_PASSWORD: bill
+      POSTGRES_DB: bill
+    ports:
+      - "5434:5432"
+    volumes:
+      - bill_pg:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bill -d bill"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+volumes:
+  bill_pg:

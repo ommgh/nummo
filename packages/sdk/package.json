@@ -1,0 +1,11 @@
+{
+  "name": "@bill/sdk",
+  "version": "0.0.0",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "description": "TypeScript client for the bill API, with fail-open check and queued track.",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

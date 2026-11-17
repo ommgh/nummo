@@ -1,0 +1,18 @@
+{
+  "name": "@bill/demo",
+  "version": "0.0.0",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "description": "Example AI chat app that gates messages with the bill SDK.",
+  "scripts": {
+    "push": "node --env-file-if-exists=../../.env src/push.ts",
+    "dev": "node --env-file-if-exists=../../.env --watch src/server.ts"
+  },
+  "dependencies": {
+    "@bill/config": "workspace:*",
+    "@bill/sdk": "workspace:*",
+    "@hono/node-server": "^2.1.9",
+    "hono": "^4.13.19"
+  }
+}

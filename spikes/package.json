@@ -1,0 +1,19 @@
+{
+  "name": "bill-spikes",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "s1": "node s1-partial-pulls.ts"
+  },
+  "dependencies": {
+    "@solana-program/compute-budget": "^0.20.0",
+    "@solana-program/system": "^0.16.0",
+    "@solana-program/token": "^0.15.0",
+    "@solana/kit": "^7.1.1",
+    "@solana/kit-plugin-rpc": "^0.15.0",
+    "@solana/kit-plugin-signer": "^0.13.0",
+    "@solana/subscriptions": "0.5.0",
+    "typescript": "^7.0.2"
+  }
+}

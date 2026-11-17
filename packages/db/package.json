@@ -1,0 +1,25 @@
+{
+  "name": "@bill/db",
+  "version": "0.0.0",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "description": "Postgres schema, migrations, and the transactional hot path (check, track, locks).",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "generate": "drizzle-kit generate",
+    "migrate": "node src/migrate.ts"
+  },
+  "dependencies": {
+    "@bill/config": "workspace:*",
+    "@bill/core": "workspace:*",
+    "drizzle-orm": "^0.45.4",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.15.0",
+    "drizzle-kit": "^0.31.11"
+  }
+}

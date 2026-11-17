@@ -1,0 +1,11 @@
+{
+  "name": "@bill/core",
+  "version": "0.0.0",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "description": "Pure billing rules: quantities, money, periods, deduction order, overage. No I/O.",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}
