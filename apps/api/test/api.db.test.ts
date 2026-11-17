@@ -2,7 +2,8 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import type { AddressInfo } from "node:net";
 import { serve, type ServerType } from "@hono/node-server";
 import { toDocument } from "@usenummo/config";
-import { createApiKey, createDb, createOrg, runMigrations } from "@usenummo/db";
+import { addOrgOwner, createApiKey, createDb, createOrg, runMigrations } from "@usenummo/db";
+import { settingsFromEnv } from "@usenummo/settlement";
 import { Nummo, NummoApiError } from "@usenummo/sdk";
 import { createApp } from "../src/app.ts";
 import { exampleConfig } from "../../../packages/db/test/helpers.ts";
@@ -93,9 +94,12 @@ describe("settlement routes", () => {
     const chain = new FakeChain({ now: new Date() });
     const orgId = await createOrg(db, "api settlement test");
     const k = (await createApiKey(db, orgId, "test")).key;
-    const srv = serve({ fetch: createApp(db, { chains: { test: chain } }).fetch, port: 0 });
+    // The app is made once the port is known: Better Auth checks request origins against the public URL.
+    let app: ReturnType<typeof createApp> | undefined;
+    const srv = serve({ fetch: (req) => app!.fetch(req), port: 0 });
     await new Promise((r) => srv.once("listening", r));
     const url = `http://127.0.0.1:${(srv.address() as AddressInfo).port}`;
+    app = createApp(db, { chains: { test: chain }, settings: { ...settingsFromEnv({}), publicUrl: url } });
     try {
       const nummo = new Nummo({ secretKey: k, baseUrl: url });
       await nummo.config.push(toDocument(exampleConfig));
@@ -150,9 +154,12 @@ describe("M3 routes: preview, top-ups, portal, dashboard", () => {
     const chain = new FakeChain({ now: new Date() });
     const orgId = await createOrg(db, "M3 Shop");
     const k = (await createApiKey(db, orgId, "test")).key;
-    const srv = serve({ fetch: createApp(db, { chains: { test: chain } }).fetch, port: 0 });
+    // The app is made once the port is known: Better Auth checks request origins against the public URL.
+    let app: ReturnType<typeof createApp> | undefined;
+    const srv = serve({ fetch: (req) => app!.fetch(req), port: 0 });
     await new Promise((r) => srv.once("listening", r));
     const url = `http://127.0.0.1:${(srv.address() as AddressInfo).port}`;
+    app = createApp(db, { chains: { test: chain }, settings: { ...settingsFromEnv({}), publicUrl: url } });
     try {
       const nummo = new Nummo({ secretKey: k, baseUrl: url });
       await nummo.config.push(toDocument({ ...exampleConfig, topUps: [{ feature: "credits", price: usdc("1"), per: 100 }] }));
@@ -190,31 +197,57 @@ describe("M3 routes: preview, top-ups, portal, dashboard", () => {
 
       expect((await nummo.customers.list({ search: "shop" })).customers.map((c) => c.id)).toEqual(["shopper"]);
 
-      // Dashboard: sign in with the key, see the payment, sign out.
-      expect((await fetch(`${url}/dashboard`, { redirect: "manual" })).headers.get("location")).toBe("/dashboard/login");
-      const bad = await fetch(`${url}/dashboard/login`, { method: "POST", body: new URLSearchParams({ key: "nummo_sk_test_nope" }), redirect: "manual" });
-      expect(bad.status).toBe(401);
-      const login = await fetch(`${url}/dashboard/login`, { method: "POST", body: new URLSearchParams({ key: k }), redirect: "manual" });
-      const cookie = login.headers.get("set-cookie")!;
-      expect(cookie).toMatch(/HttpOnly/i);
-      expect(cookie).toMatch(/SameSite=Strict/i);
-      expect(cookie).not.toContain(k);
-      const auth = { headers: { cookie: cookie.split(";")[0]! } };
-      const home = await (await fetch(`${url}/dashboard`, auth)).text();
-      expect(home).toContain("M3 Shop");
-      expect(home).toMatch(/Collected, last 30 days<\/div><div class="v">5 /);
-      for (const page of ["customers", "customers/shopper", "plans", "payments", "usage", "webhooks"]) {
-        const r = await fetch(`${url}/dashboard/${page}`, auth);
+      // Dashboard: sign up with Better Auth, link the org, see the payment, manage keys, sign out.
+      const dash = `${url}/dashboard/api`;
+      const origin = { origin: url };
+      const jpost = (path: string, b: unknown, headers: Record<string, string> = {}) =>
+        fetch(path.startsWith("http") ? path : `${dash}${path}`, { method: "POST", headers: { "content-type": "application/json", ...origin, ...headers }, body: JSON.stringify(b) });
+      expect((await fetch(`${dash}/overview`)).status).toBe(401);
+      const email = `owner-${Date.now()}@example.com`;
+      const signup = await jpost(`${url}/api/auth/sign-up/email`, { email, password: "correct horse battery", name: "Owner" });
+      expect(signup.status).toBe(200);
+      const cookie = signup.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
+      expect(signup.headers.getSetCookie().join("\n")).toMatch(/HttpOnly/i);
+      const auth = { headers: { cookie } };
+      // Signed in, but no organization yet.
+      expect((await (await fetch(`${dash}/session`, auth)).json()).org).toBeNull();
+      expect((await fetch(`${dash}/overview`, auth)).status).toBe(403);
+      // The test org was made with a key; give it this owner, then make it active.
+      expect(await addOrgOwner(db, orgId, email)).toBeTruthy();
+      expect((await jpost(`${url}/api/auth/organization/set-active`, { organizationId: orgId }, auth.headers)).status).toBe(200);
+      const me = await (await fetch(`${dash}/session`, auth)).json();
+      expect(me).toMatchObject({ org: { id: orgId, name: "M3 Shop", role: "owner" }, env: "test", user: { email } });
+      // A form post (what a cross-site page can send without a preflight) is refused.
+      expect((await fetch(`${dash}/keys`, { method: "POST", ...auth, body: new URLSearchParams({ env: "test" }) })).status).toBe(400);
+
+      const home = await (await fetch(`${dash}/overview`, auth)).json();
+      expect(home.collected30d).toBe("5");
+      expect(home.daily).toHaveLength(30);
+      expect(home.usageDaily.series).toHaveLength(30);
+      // Live data is separate.
+      expect((await (await fetch(`${dash}/overview`, { headers: { cookie, "x-nummo-env": "live" } })).json()).collected30d).toBe("0");
+      for (const page of ["customers", "customers/shopper", "plans", "payments", "usage", "webhooks", "keys"]) {
+        const r = await fetch(`${dash}/${page}`, auth);
         expect(r.status, page).toBe(200);
       }
-      const detail = await (await fetch(`${url}/dashboard/customers/shopper`, auth)).text();
-      expect(detail).toContain("topup");
-      // Customer-supplied text is escaped.
-      await nummo.customers.upsert("xss", { name: "<script>alert(1)</script>" });
-      expect(await (await fetch(`${url}/dashboard/customers?q=xss`, auth)).text()).toContain("&lt;script&gt;");
+      const detail = await (await fetch(`${dash}/customers/shopper`, auth)).json();
+      expect(detail.customer.invoices.map((i: { kind: string }) => i.kind)).toContain("topup");
+      expect((await jpost("/customers/shopper/grant", { featureId: "credits", amount: "5" }, auth.headers)).status).toBe(200);
 
-      await fetch(`${url}/dashboard/logout`, { method: "POST", ...auth, redirect: "manual" });
-      expect((await fetch(`${url}/dashboard`, { ...auth, redirect: "manual" })).status).toBe(302);
+      // Keys: create one, use it, revoke it.
+      const made = await (await jpost("/keys", { env: "test" }, auth.headers)).json();
+      expect(made.key).toMatch(/^nummo_sk_test_/);
+      expect((await fetch(`${url}/v1/customers`, { headers: { authorization: `Bearer ${made.key}` } })).status).toBe(200);
+      const keys = (await (await fetch(`${dash}/keys`, auth)).json()).keys;
+      expect(JSON.stringify(keys)).not.toContain(made.key);
+      expect((await jpost(`/keys/${made.id}/revoke`, {}, auth.headers)).status).toBe(200);
+      expect((await fetch(`${url}/v1/customers`, { headers: { authorization: `Bearer ${made.key}` } })).status).toBe(401);
+
+      // The pages themselves are the web app's index.html (or a note when it is not built).
+      expect((await fetch(`${url}/dashboard/customers/shopper`)).headers.get("content-type")).toContain("text/html");
+
+      await jpost(`${url}/api/auth/sign-out`, {}, auth.headers);
+      expect((await fetch(`${dash}/overview`, auth)).status).toBe(401);
     } finally {
       await new Promise((r) => srv.close(r));
     }

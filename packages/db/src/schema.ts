@@ -531,13 +531,6 @@ export const portalSessions = pgTable(
 );
 
 /** Merchant dashboard sign-ins. The cookie holds a random token; we store its hash. */
-export const dashboardSessions = pgTable("dashboard_sessions", {
-  tokenHash: text("token_hash").primaryKey(),
-  ...scope,
-  apiKeyId: text("api_key_id").notNull(),
-  createdAt: ts("created_at").notNull().defaultNow(),
-  expiresAt: ts("expires_at").notNull(),
-});
 
 // ------------------------------------------------------------------ webhooks
 
@@ -570,4 +563,107 @@ export const outbox = pgTable(
     deadAt: ts("dead_at"),
   },
   (t) => [index("outbox_pending_idx").on(t.nextAttemptAt).where(sql`delivered_at is null and dead_at is null`)],
+);
+
+// ------------------------------------------------------------------ dashboard accounts (Better Auth)
+//
+// Users, their sessions and sign-in methods, and organizations with members and
+// invitations: the tables Better Auth's Drizzle adapter and organization plugin
+// expect (generated with `npx auth generate`), under auth_ names. An
+// organization's id is the nummo org id (apps/api/src/auth.ts).
+
+export const authUsers = pgTable("auth_users", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  emailVerified: boolean("email_verified").default(false).notNull(),
+  image: text("image"),
+  createdAt: ts("created_at").defaultNow().notNull(),
+  updatedAt: ts("updated_at").defaultNow().$onUpdate(() => new Date()).notNull(),
+});
+
+export const authSessions = pgTable(
+  "auth_sessions",
+  {
+    id: text("id").primaryKey(),
+    expiresAt: ts("expires_at").notNull(),
+    token: text("token").notNull().unique(),
+    createdAt: ts("created_at").defaultNow().notNull(),
+    updatedAt: ts("updated_at").$onUpdate(() => new Date()).notNull(),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+    userId: text("user_id").notNull().references(() => authUsers.id, { onDelete: "cascade" }),
+    activeOrganizationId: text("active_organization_id"),
+  },
+  (t) => [index("auth_sessions_user_idx").on(t.userId)],
+);
+
+export const authAccounts = pgTable(
+  "auth_accounts",
+  {
+    id: text("id").primaryKey(),
+    accountId: text("account_id").notNull(),
+    providerId: text("provider_id").notNull(),
+    userId: text("user_id").notNull().references(() => authUsers.id, { onDelete: "cascade" }),
+    accessToken: text("access_token"),
+    refreshToken: text("refresh_token"),
+    idToken: text("id_token"),
+    accessTokenExpiresAt: ts("access_token_expires_at"),
+    refreshTokenExpiresAt: ts("refresh_token_expires_at"),
+    scope: text("scope"),
+    password: text("password"),
+    createdAt: ts("created_at").defaultNow().notNull(),
+    updatedAt: ts("updated_at").$onUpdate(() => new Date()).notNull(),
+  },
+  (t) => [index("auth_accounts_user_idx").on(t.userId)],
+);
+
+export const authVerifications = pgTable(
+  "auth_verifications",
+  {
+    id: text("id").primaryKey(),
+    identifier: text("identifier").notNull(),
+    value: text("value").notNull(),
+    expiresAt: ts("expires_at").notNull(),
+    createdAt: ts("created_at").defaultNow().notNull(),
+    updatedAt: ts("updated_at").defaultNow().$onUpdate(() => new Date()).notNull(),
+  },
+  (t) => [index("auth_verifications_identifier_idx").on(t.identifier)],
+);
+
+export const authOrganizations = pgTable("auth_organizations", {
+  /** The nummo org id (orgs.id). */
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  logo: text("logo"),
+  createdAt: ts("created_at").notNull(),
+  metadata: text("metadata"),
+});
+
+export const authMembers = pgTable(
+  "auth_members",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id").notNull().references(() => authOrganizations.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull().references(() => authUsers.id, { onDelete: "cascade" }),
+    role: text("role").default("member").notNull(),
+    createdAt: ts("created_at").notNull(),
+  },
+  (t) => [index("auth_members_org_idx").on(t.organizationId), index("auth_members_user_idx").on(t.userId)],
+);
+
+export const authInvitations = pgTable(
+  "auth_invitations",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id").notNull().references(() => authOrganizations.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    role: text("role"),
+    status: text("status").default("pending").notNull(),
+    expiresAt: ts("expires_at").notNull(),
+    createdAt: ts("created_at").defaultNow().notNull(),
+    inviterId: text("inviter_id").notNull().references(() => authUsers.id, { onDelete: "cascade" }),
+  },
+  (t) => [index("auth_invitations_org_idx").on(t.organizationId), index("auth_invitations_email_idx").on(t.email)],
 );

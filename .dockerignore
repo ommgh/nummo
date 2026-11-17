@@ -7,3 +7,4 @@ dist
 keys
 **/.keys
 **/*.state.json
+apps/web/dist

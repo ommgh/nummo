@@ -18,6 +18,7 @@
     "@usenummo/db": "workspace:*",
     "@usenummo/settlement": "workspace:*",
     "@usenummo/solana": "workspace:*",
+    "better-auth": "1.7.25",
     "hono": "^4.13.19",
     "zod": "^4.6.7"
   },

@@ -79,11 +79,11 @@ try {
 
   // ---- Publishing from the dashboard with the merchant's wallet
   log("dashboard: sign in with the key and publish pro@1 with the merchant wallet");
-  const login = await fetch(`${apiUrl}/dashboard/login`, { method: "POST", body: new URLSearchParams({ key: apiKey }), redirect: "manual" });
+  const login = await fetch(`${apiUrl}/dashboard/api/login`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key: apiKey }) });
   const cookie = login.headers.get("set-cookie")!.split(";")[0]!;
-  const built = await post(`${apiUrl}/dashboard/plans/pro/1/transaction`, { owner: merchant.address }, { cookie });
+  const built = await post(`${apiUrl}/dashboard/api/plans/pro/1/transaction`, { owner: merchant.address }, { cookie });
   const published = await post(
-    `${apiUrl}/dashboard/plans/pro/1/submit`,
+    `${apiUrl}/dashboard/api/plans/pro/1/submit`,
     { owner: merchant.address, signedTransaction: await signAs(built.transaction, merchant), message: built.message, lastValidBlockHeight: built.lastValidBlockHeight, planAddress: built.planAddress },
     { cookie },
   );

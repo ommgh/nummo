@@ -28,11 +28,12 @@ Needs Node 22.18+ (TypeScript runs natively, no build step), pnpm and Docker.
 ```bash
 pnpm install
 pnpm db:up                                       # Postgres 18 on localhost:5434
-pnpm --filter @usenummo/api bootstrap "Acme AI"  # creates an org, prints a test API key
-pnpm nummo login --key nummo_sk_test_...
-pnpm dev:api                                     # API, checkout, portal and dashboard on http://localhost:8787
+pnpm build:web                                   # website and dashboard (apps/web)
+pnpm dev:api                                     # API, website, dashboard, checkout and portal on http://localhost:8787
 pnpm dev:worker                                  # renewals, overage, retries, top-ups, reconciliation, webhooks
 ```
+
+Sign up at http://localhost:8787/sign-up, name your organization, and create a test key under **API keys**; then `pnpm nummo login --key nummo_sk_test_...`. For the website and dashboard with hot reload, run `pnpm dev:web` alongside the API and open http://localhost:5173.
 
 Settlement needs a puller wallet in `NUMMO_TEST_PULLER_KEY` (see [.env.example](.env.example)); the [quickstart](docs/guide/quickstart.md) walks through it. For containers: `docker compose --profile app up --build`, or see [self-hosting](docs/guide/deploy.md).
 
@@ -47,7 +48,8 @@ Settlement needs a puller wallet in `NUMMO_TEST_PULLER_KEY` (see [.env.example](
 | `packages/settlement` | Checkout, the settlement worker (renewals, overage, refills, safe resend), the failed-payment state machine, the reconciler, `verify`, the webhook dispatcher, and the customer portal. |
 | `packages/sdk` | TypeScript client. Fails open; queued `track` calls carry idempotency keys so a resend never double counts. `verifyWebhook` for receivers. |
 | `packages/cli` | `nummo login`, `init`, `push`, `plans`, `plans publish`, `wallet`, `customers`, `preview`, `attach`, `portal`, `verify`. Run with `pnpm nummo`. |
-| `apps/api` | Hono HTTP API (`/v1/...`), the hosted checkout (`/checkout/:id`), customer portal (`/portal/:id`) and merchant dashboard (`/dashboard`). |
+| `apps/api` | Hono HTTP API (`/v1/...`), the hosted checkout (`/checkout/:id`), customer portal (`/portal/:id`), the dashboard's JSON API (`/dashboard/api`), accounts with Better Auth (`/api/auth`), and the built web app. |
+| `apps/web` | The website (`/`) and merchant dashboard (`/dashboard`): React, Vite, Tailwind and shadcn/ui, with efferd's dashboard blocks and React Bits effects. |
 | `apps/worker` | Runs settlement, reconciliation and webhook delivery on their own cadences. |
 | `apps/demo` | AI chat demo that gates messages on credits, upgrades through checkout, buys credits, and opens the portal. |
 | `e2e` | Scripted devnet scenarios: `devnet.ts` (M2) and `devnet-m3.ts` (M3). |

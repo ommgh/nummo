@@ -116,3 +116,42 @@ export async function webhookStatus(db: Db, scope: Scope) {
     })),
   };
 }
+
+/**
+ * Usage per day for the busiest features (by event count) over the last `days`
+ * days, zero-filled, for the dashboard's usage chart. Values are decimal strings.
+ */
+export async function usageDaily(db: Db, scope: Scope, q: { days?: number; features?: number } = {}, now = new Date()) {
+  const days = Math.min(Math.max(q.days ?? 30, 1), 90);
+  const since = new Date(now.getTime() - days * DAY);
+  const top = await db
+    .select({ featureId: usageEvents.featureId })
+    .from(usageEvents)
+    .where(and(inScope(usageEvents, scope), gt(usageEvents.occurredAt, since)))
+    .groupBy(usageEvents.featureId)
+    .orderBy(desc(sql`count(*)`))
+    .limit(Math.min(Math.max(q.features ?? 3, 1), 8));
+  const features = top.map((t) => t.featureId);
+  const rows = features.length
+    ? await db
+        .select({
+          day: sql<string>`to_char(date_trunc('day', ${usageEvents.occurredAt}), 'YYYY-MM-DD')`,
+          featureId: usageEvents.featureId,
+          total: sql<string>`sum(${usageEvents.value})::text`,
+        })
+        .from(usageEvents)
+        .where(and(inScope(usageEvents, scope), gt(usageEvents.occurredAt, since), inArray(usageEvents.featureId, features)))
+        .groupBy(sql`1`, usageEvents.featureId)
+    : [];
+  const series: { day: string; values: Record<string, string> }[] = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const day = new Date(now.getTime() - i * DAY).toISOString().slice(0, 10);
+    const values: Record<string, string> = {};
+    for (const f of features) {
+      const hit = rows.find((r) => r.day === day && r.featureId === f);
+      values[f] = hit ? formatQty(qty(hit.total)) : "0";
+    }
+    series.push({ day, values });
+  }
+  return { features, series };
+}

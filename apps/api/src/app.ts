@@ -50,7 +50,9 @@ import {
 } from "@usenummo/settlement";
 import { CHECKOUT_PAGE } from "./checkout-page.ts";
 import { PORTAL_PAGE } from "./portal-page.ts";
-import { dashboard } from "./dashboard.ts";
+import { dashboardApi } from "./dashboard.ts";
+import { webApp } from "./web.ts";
+import { type Auth, createAuth } from "./auth.ts";
 
 const decimal = z.string().regex(/^\d+(\.\d{1,9})?$/, "a non-negative decimal string with up to 9 places");
 /** Amounts in requests are integer strings of token base units (doc 04): "10000000" is 10 USDC. */
@@ -134,6 +136,10 @@ export type AppOptions = {
   /** Chains per environment. Without one, checkout, publishing and verify answer settlement_unavailable. */
   chains?: Chains;
   settings?: SettlementSettings;
+  /** The built web app (apps/web/dist by default); null serves a note instead. */
+  webDir?: string | null;
+  /** Dashboard accounts; created from the settings when omitted. */
+  auth?: Auth;
 };
 
 export function createApp(db: Db, opts: AppOptions = {}) {
@@ -192,8 +198,9 @@ export function createApp(db: Db, opts: AppOptions = {}) {
 
   // ---------------------------------------------------------------- merchant dashboard (cookie session)
 
-  app.route("/dashboard", dashboard(db, chains, settings));
-  app.get("/", (c) => c.redirect("/dashboard"));
+  const auth = opts.auth ?? createAuth(db, { publicUrl: settings.publicUrl });
+  app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
+  app.route("/dashboard/api", dashboardApi(db, chains, settings, auth));
 
   // On-chain plan metadata URI.
   app.get("/p/:id", async (c) => {
@@ -326,5 +333,7 @@ export function createApp(db: Db, opts: AppOptions = {}) {
   });
 
   app.route("/v1", v1);
+  // The website and the dashboard, last: they only answer GETs the routes above did not.
+  app.route("/", webApp(opts.webDir));
   return app;
 }

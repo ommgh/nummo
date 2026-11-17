@@ -4,10 +4,10 @@ nummo is two processes and a Postgres database:
 
 | Process | Command | Does |
 | --- | --- | --- |
-| API | `node apps/api/src/server.ts` | `/v1` API, hosted checkout, customer portal, merchant dashboard. Applies migrations on start. |
+| API | `node apps/api/src/server.ts` | `/v1` API, hosted checkout, customer portal, the website and merchant dashboard (built from `apps/web`), accounts at `/api/auth`. Applies migrations on start. |
 | Worker | `node apps/worker/src/main.ts` | Renewals, overage and top-up pulls, retries, reconciliation with the chain, webhook delivery. Safe to run two: each job takes a Postgres advisory lock. |
 
-Node runs the TypeScript directly, so there is no build step.
+Node runs the TypeScript directly. The one build step is the website and dashboard: `pnpm build:web` writes `apps/web/dist`, which the API serves. The Dockerfile does it for you.
 
 ## Docker
 
@@ -23,12 +23,33 @@ Or everything locally, with the puller keypair at `./keys/puller.json`:
 docker compose --profile app up --build
 ```
 
+## Railway
+
+The hosted demo runs on Railway as one project with three services: `Postgres` (Railway's template), `api` and `worker`. The api and worker both build from this repository's Dockerfile and redeploy on every push to `master`.
+
+| Service | Settings |
+| --- | --- |
+| `api` | Public domain on port 8787, healthcheck `/health`. Variables: `PORT=8787` (Railway otherwise injects 8080), `BETTER_AUTH_SECRET`, `DATABASE_URL=${{Postgres.DATABASE_URL}}`, `NUMMO_PUBLIC_URL` (the public domain), `NUMMO_TEST_PULLER_KEY` (JSON byte array), `NUMMO_TEST_RPC_URL`. |
+| `worker` | Start command `node apps/worker/src/main.ts`, restart always. Same variables plus `MIGRATE_ON_START=0`. |
+
+Sign up at `/sign-up` on the public domain, name the organization and create keys under **API keys**. To give an org made earlier with the bootstrap script an owner, sign up first, then:
+
+```bash
+railway ssh --service api -- node apps/api/src/bootstrap.ts --org org_... --owner you@example.com
+```
+
+Expect about 5 to 10 USD a month on the Hobby plan: three small always-on processes. Add `NUMMO_LIVE_*` variables only after the mainnet checklist below.
+
 ## Settings
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `DATABASE_URL` | local | Postgres connection string. |
 | `PORT` | 8787 | API port. |
+| `BETTER_AUTH_SECRET` | — | **Required in production.** Signs dashboard sessions; 32+ random bytes (`openssl rand -base64 32`). Changing it signs everyone out. |
+| `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | — | Offer "Continue with GitHub". Callback URL: `<NUMMO_PUBLIC_URL>/api/auth/callback/github`. |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | — | Offer "Continue with Google". Callback URL: `<NUMMO_PUBLIC_URL>/api/auth/callback/google`. |
+| `NUMMO_TRUSTED_ORIGINS` | — | Extra origins (comma-separated) allowed to call `/api/auth`, for a dashboard served from another domain. |
 | `NUMMO_PUBLIC_URL` | `http://localhost:8787` | Public base URL: checkout, portal and plan metadata links. Use `https://` in production; the dashboard cookie is then marked Secure. |
 | `NUMMO_TEST_PULLER_KEY`, `NUMMO_LIVE_PULLER_KEY` | — | Puller keypair (file path or JSON byte array) per environment. Without one, that environment's settlement is off. |
 | `NUMMO_TEST_RPC_URL`, `NUMMO_LIVE_RPC_URL` | public cluster | RPC endpoint. Use a provider's on mainnet. |
@@ -39,7 +60,7 @@ docker compose --profile app up --build
 | `NUMMO_SETTLE_EVERY`, `NUMMO_RECONCILE_EVERY` | 10s, 2m | Worker cadences. |
 | `MIGRATE_ON_START` | 1 | Set to 0 on all but one process if you migrate separately. |
 
-Test keys (`nummo_sk_test_…`) settle on devnet, live keys (`nummo_sk_live_…`) on mainnet, with separate data. `pnpm --filter @usenummo/api bootstrap --org <org id> --live` adds a live key to an org.
+Test keys (`nummo_sk_test_…`) settle on devnet, live keys (`nummo_sk_live_…`) on mainnet, with separate data. The dashboard has a Test/Live switch, and owners and admins create both kinds of key under **API keys**.
 
 ## Keys and custody
 
@@ -48,7 +69,7 @@ Test keys (`nummo_sk_test_…`) settle on devnet, live keys (`nummo_sk_live_…`
 
 ## Before real money: mainnet checklist
 
-1. Create a live key and sign in to the dashboard with it; check the badge says **live · mainnet**.
+1. Switch the dashboard to **Live** and create a live key under **API keys**.
 2. Set `NUMMO_LIVE_PULLER_KEY` to a **new** keypair (`nummo wallet new`), funded with a little mainnet SOL. Never reuse the devnet puller.
 3. Set `NUMMO_LIVE_RPC_URL` to a provider's endpoint, and `NUMMO_PUBLIC_URL` to your HTTPS address.
 4. Push the config with the live key, and publish the paid plans from a merchant wallet you control (a hardware wallet is a good idea). The ceiling you publish is permanent for that version: check it.

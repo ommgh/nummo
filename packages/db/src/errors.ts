@@ -1,6 +1,7 @@
 export type ErrorCode =
   | "invalid_request"
   | "unauthorized"
+  | "forbidden"
   | "customer_not_found"
   | "feature_not_found"
   | "plan_not_found"
@@ -28,6 +29,7 @@ export type ErrorCode =
 const STATUS: Record<ErrorCode, number> = {
   invalid_request: 400,
   unauthorized: 401,
+  forbidden: 403,
   customer_not_found: 404,
   feature_not_found: 404,
   plan_not_found: 404,

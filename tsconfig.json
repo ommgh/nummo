@@ -1,7 +1,10 @@
 {
   "compilerOptions": {
     "target": "es2024",
-    "lib": ["es2024", "dom"],
+    "lib": [
+      "es2024",
+      "dom"
+    ],
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "strict": true,
@@ -14,7 +17,21 @@
     "rewriteRelativeImportExtensions": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": ["node"]
+    "types": [
+      "node"
+    ]
   },
-  "include": ["apps/*/src", "apps/*/nummo.config.ts", "apps/*/test", "packages/*/src", "packages/*/test", "vitest.config.ts", "test", "e2e"]
+  "include": [
+    "apps/*/src",
+    "apps/*/nummo.config.ts",
+    "apps/*/test",
+    "packages/*/src",
+    "packages/*/test",
+    "vitest.config.ts",
+    "test",
+    "e2e"
+  ],
+  "exclude": [
+    "apps/web"
+  ]
 }

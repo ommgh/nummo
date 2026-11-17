@@ -1,0 +1,184 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/jetbrains-mono";
+@import "@fontsource-variable/space-grotesk";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * nummo: Solana's colours on near-black. Green (#14F195) is the action colour,
+ * purple (#9945FF) the accent, and the two together form the brand gradient.
+ * JetBrains Mono for the product, Space Grotesk for display headings.
+ */
+@theme inline {
+    --font-sans: 'JetBrains Mono Variable', ui-monospace, monospace;
+    --font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
+    --font-heading: var(--font-mono);
+    --font-display: 'Space Grotesk Variable', ui-sans-serif, system-ui, sans-serif;
+    --color-sol-green: #14f195;
+    --color-sol-purple: #9945ff;
+    --color-sol-teal: #19fb9b;
+    --color-sol-blue: #00c2ff;
+    --color-sol-pink: #dc1fff;
+    --color-success: var(--success);
+    --color-warning: var(--warning);
+    --color-sidebar-ring: var(--sidebar-ring);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar: var(--sidebar);
+    --color-chart-5: var(--chart-5);
+    --color-chart-4: var(--chart-4);
+    --color-chart-3: var(--chart-3);
+    --color-chart-2: var(--chart-2);
+    --color-chart-1: var(--chart-1);
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-destructive: var(--destructive);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+    --radius-sm: calc(var(--radius) * 0.6);
+    --radius-md: calc(var(--radius) * 0.8);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) * 1.4);
+    --radius-2xl: calc(var(--radius) * 1.8);
+    --radius-3xl: calc(var(--radius) * 2.2);
+    --radius-4xl: calc(var(--radius) * 2.6);
+    --animate-marquee: marquee 40s linear infinite;
+    --animate-shimmer: shimmer 3s linear infinite;
+    @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+    @keyframes shimmer { from { background-position: 0% 50%; } to { background-position: 200% 50%; } }
+}
+
+/* Light: kept for completeness; the product ships dark. */
+:root {
+    --background: oklch(0.99 0.003 300);
+    --foreground: oklch(0.17 0.02 290);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.17 0.02 290);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.17 0.02 290);
+    --primary: oklch(0.52 0.25 295);
+    --primary-foreground: oklch(0.99 0 0);
+    --secondary: oklch(0.96 0.01 300);
+    --secondary-foreground: oklch(0.2 0.02 290);
+    --muted: oklch(0.96 0.01 300);
+    --muted-foreground: oklch(0.5 0.02 290);
+    --accent: oklch(0.95 0.03 300);
+    --accent-foreground: oklch(0.3 0.12 295);
+    --destructive: oklch(0.58 0.22 25);
+    --success: oklch(0.6 0.15 160);
+    --warning: oklch(0.7 0.15 75);
+    --border: oklch(0.91 0.01 300);
+    --input: oklch(0.91 0.01 300);
+    --ring: oklch(0.52 0.25 295);
+    --chart-1: oklch(0.6 0.15 160);
+    --chart-2: oklch(0.52 0.25 295);
+    --chart-3: oklch(0.65 0.15 230);
+    --chart-4: oklch(0.6 0.25 320);
+    --chart-5: oklch(0.75 0.15 75);
+    --radius: 0rem;
+    --sidebar: oklch(0.98 0.005 300);
+    --sidebar-foreground: oklch(0.17 0.02 290);
+    --sidebar-primary: oklch(0.52 0.25 295);
+    --sidebar-primary-foreground: oklch(0.99 0 0);
+    --sidebar-accent: oklch(0.95 0.02 300);
+    --sidebar-accent-foreground: oklch(0.2 0.02 290);
+    --sidebar-border: oklch(0.91 0.01 300);
+    --sidebar-ring: oklch(0.52 0.25 295);
+}
+
+.dark {
+    --background: #07070b;
+    --foreground: #ecebf3;
+    --card: #0c0c13;
+    --card-foreground: #ecebf3;
+    --popover: #0f0f18;
+    --popover-foreground: #ecebf3;
+    --primary: #14f195;
+    --primary-foreground: #04130c;
+    --secondary: #16161f;
+    --secondary-foreground: #ecebf3;
+    --muted: #13131b;
+    --muted-foreground: #8d8b9f;
+    --accent: #1b1430;
+    --accent-foreground: #c9a8ff;
+    --destructive: #ff5c7a;
+    --success: #14f195;
+    --warning: #ffc147;
+    --border: rgb(255 255 255 / 0.08);
+    --input: rgb(255 255 255 / 0.12);
+    --ring: #9945ff;
+    --chart-1: #14f195;
+    --chart-2: #9945ff;
+    --chart-3: #00c2ff;
+    --chart-4: #dc1fff;
+    --chart-5: #ffc147;
+    --sidebar: #08080d;
+    --sidebar-foreground: #ecebf3;
+    --sidebar-primary: #14f195;
+    --sidebar-primary-foreground: #04130c;
+    --sidebar-accent: #15151f;
+    --sidebar-accent-foreground: #ecebf3;
+    --sidebar-border: rgb(255 255 255 / 0.08);
+    --sidebar-ring: #9945ff;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-mono;
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+  button:not(:disabled), [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--color-sol-purple) 45%, transparent);
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    background: linear-gradient(90deg, var(--color-sol-purple), var(--color-sol-blue) 50%, var(--color-sol-green));
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .bg-gradient-sol {
+    background: linear-gradient(90deg, var(--color-sol-purple), var(--color-sol-green));
+  }
+  .bg-grid {
+    background-image:
+      linear-gradient(to right, rgb(255 255 255 / 0.04) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(255 255 255 / 0.04) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}

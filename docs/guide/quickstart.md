@@ -43,9 +43,14 @@ NUMMO_TEST_PULLER_KEY=./keys/puller.json
 ## 4. Start nummo
 
 ```bash
-pnpm --filter @usenummo/api bootstrap "My App"   # prints a test secret key, once
-pnpm nummo login --key nummo_sk_test_...         # the CLI remembers it
+pnpm build:web                                   # the website and dashboard (once, or after changing apps/web)
 pnpm dev:api                                     # http://localhost:8787
+```
+
+Open http://localhost:8787/sign-up, create an account and name your organization. On the dashboard, go to **API keys**, click **New test key** and copy it (it is shown once):
+
+```bash
+pnpm nummo login --key nummo_sk_test_...         # the CLI remembers it
 ```
 
 In a second terminal:
@@ -66,7 +71,7 @@ The CLI shows what will change and asks before applying. See [Pricing config](pr
 
 ## 6. Publish the paid plans on-chain
 
-Open http://localhost:8787/dashboard, sign in with the secret key, go to **Plans**, and click **Publish with wallet** next to `pro@1`. Approve it with the **merchant** account. Do the same for `team@1`.
+Open http://localhost:8787/dashboard, go to **Plans**, and click **Publish with wallet** next to `pro@1`. Approve it with the **merchant** account. Do the same for `team@1`.
 
 Each click creates a Solana Subscriptions plan owned by your merchant account. Its amount is the most a customer can ever be charged per period (base price plus overage cap), and it cannot change afterwards. That is why a price change needs a new plan version.
 
