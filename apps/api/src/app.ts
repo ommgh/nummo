@@ -16,6 +16,7 @@ import {
   getCustomer,
   grantBalance,
   listEvents,
+  listInvoices,
   resolveApiKey,
   track,
   trackBatch,
@@ -23,6 +24,22 @@ import {
   type Db,
   type Scope,
 } from "@usenummo/db";
+import {
+  type Chains,
+  defaultSettings,
+  deleteWebhookEndpoint,
+  getCheckout,
+  getWebhookEndpoint,
+  listPlanVersions,
+  planMetadata,
+  prepareCheckoutTransaction,
+  registerPublishedPlan,
+  type SettlementSettings,
+  setWebhookEndpoint,
+  submitCheckout,
+  verify,
+} from "@usenummo/settlement";
+import { CHECKOUT_PAGE } from "./checkout-page.ts";
 
 const decimal = z.string().regex(/^\d+(\.\d{1,9})?$/, "a non-negative decimal string with up to 9 places");
 const id = z.string().min(1).max(255);
@@ -67,6 +84,10 @@ const schemas = {
     expiresAt: z.iso.datetime().nullable().optional(),
   }),
   customer: z.object({ name: z.string().nullable().optional(), email: z.email().nullable().optional() }),
+  publish: z.object({ address: z.string().min(32).max(64) }),
+  webhook: z.object({ url: z.url() }),
+  checkoutTx: z.object({ wallet: z.string().min(1).max(64) }),
+  checkoutSubmit: z.object({ signedTransaction: z.string().min(1).max(4096) }),
 };
 
 type Vars = { Variables: { scope: Scope } };
@@ -90,8 +111,21 @@ async function body<T extends z.ZodType>(c: Context, schema: T): Promise<z.infer
 
 const toDate = (v: number | string) => new Date(typeof v === "number" ? v : Date.parse(v));
 
-export function createApp(db: Db) {
+export type AppOptions = {
+  /** Chains per environment. Without one, checkout, publishing and verify answer settlement_unavailable. */
+  chains?: Chains;
+  settings?: SettlementSettings;
+};
+
+export function createApp(db: Db, opts: AppOptions = {}) {
   const app = new Hono<Vars>();
+  const chains: Chains = opts.chains ?? {};
+  const settings = opts.settings ?? defaultSettings();
+  const chainFor = (scope: Scope) => {
+    const c = chains[scope.env];
+    if (!c) throw new NummoError("settlement_unavailable", `settlement is not configured for the ${scope.env} environment (set NUMMO_${scope.env.toUpperCase()}_PULLER_KEY)`);
+    return c;
+  };
 
   app.onError((err, c) => {
     if (err instanceof NummoError) {
@@ -103,6 +137,25 @@ export function createApp(db: Db) {
   app.notFound((c) => c.json({ error: { code: "not_found", message: `no route for ${c.req.method} ${c.req.path}` } }, 404));
 
   app.get("/health", (c) => c.json({ ok: true }));
+
+  // ---------------------------------------------------------------- hosted checkout (public, keyed by session id)
+
+  app.get("/checkout/:id", (c) => c.html(CHECKOUT_PAGE));
+  app.get("/checkout/:id/session", async (c) => c.json(await getCheckout(db, chains, c.req.param("id"))));
+  app.post("/checkout/:id/transaction", async (c) => {
+    const b = await body(c, schemas.checkoutTx);
+    return c.json(await prepareCheckoutTransaction(db, chains, c.req.param("id"), b.wallet));
+  });
+  app.post("/checkout/:id/submit", async (c) => {
+    const b = await body(c, schemas.checkoutSubmit);
+    return c.json(await submitCheckout(db, chains, settings, c.req.param("id"), b.signedTransaction));
+  });
+  // On-chain plan metadata URI.
+  app.get("/p/:id", async (c) => {
+    const m = await planMetadata(db, c.req.param("id"));
+    if (!m) throw new NummoError("not_found", "plan not found");
+    return c.json(m);
+  });
 
   const v1 = new Hono<Vars>();
   v1.use("*", async (c, next) => {
@@ -147,7 +200,7 @@ export function createApp(db: Db) {
 
   v1.post("/attach", async (c) => {
     const b = await body(c, schemas.attach);
-    return c.json(await attach(db, c.get("scope"), b));
+    return c.json(await attach(db, c.get("scope"), b, { publicUrl: settings.publicUrl }));
   });
 
   v1.get("/customers/:id", async (c) => c.json(await getCustomer(db, c.get("scope"), c.req.param("id"))));
@@ -156,8 +209,32 @@ export function createApp(db: Db) {
     return c.json(await upsertCustomer(db, c.get("scope"), { id: c.req.param("id"), ...b }));
   });
   v1.get("/customers/:id/invoices", async (c) => {
-    const customer = await getCustomer(db, c.get("scope"), c.req.param("id"));
-    return c.json({ invoices: customer.invoices });
+    await getCustomer(db, c.get("scope"), c.req.param("id")); // 404 for an unknown customer
+    return c.json({ invoices: await listInvoices(db, c.get("scope"), c.req.param("id"), 100) });
+  });
+
+  v1.get("/plans", async (c) => c.json(await listPlanVersions(db, c.get("scope"), chains[c.get("scope").env], settings.publicUrl)));
+  v1.post("/plans/:planId/versions/:version/publish", async (c) => {
+    const b = await body(c, schemas.publish);
+    const version = Number(c.req.param("version"));
+    if (!Number.isInteger(version) || version < 1) throw new NummoError("invalid_request", "version must be a positive integer");
+    const scope = c.get("scope");
+    return c.json(await registerPublishedPlan(db, chainFor(scope), scope, c.req.param("planId"), version, b.address));
+  });
+
+  v1.get("/verify", async (c) => {
+    const scope = c.get("scope");
+    return c.json(await verify(db, chainFor(scope), scope));
+  });
+
+  v1.get("/webhook", async (c) => c.json({ endpoint: await getWebhookEndpoint(db, c.get("scope")) }));
+  v1.put("/webhook", async (c) => {
+    const b = await body(c, schemas.webhook);
+    return c.json({ endpoint: await setWebhookEndpoint(db, c.get("scope"), b.url) });
+  });
+  v1.delete("/webhook", async (c) => {
+    await deleteWebhookEndpoint(db, c.get("scope"));
+    return c.json({ endpoint: null });
   });
 
   v1.get("/events", async (c) => {
@@ -187,7 +264,6 @@ export function createApp(db: Db) {
     ["post", "/preview", "M3"],
     ["post", "/topups", "M3"],
     ["post", "/portal", "M3"],
-    ["get", "/verify", "M2"],
   ] as const) {
     v1[method](path, () => {
       throw new NummoError("not_implemented", `${path} arrives in milestone ${milestone}`);

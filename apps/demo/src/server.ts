@@ -3,13 +3,13 @@
  *
  * The model is faked; the billing is real. Every message is gated with
  * `check({ sendEvent: true })`, so it is allowed and charged in one call.
- * Steps 1 to 3 of the demo script work in M1; the wallet upgrade arrives in M2,
- * so "Upgrade" uses the test environment's skipPayment for now.
+ * "Upgrade" sends the user to nummo's hosted checkout, where a Solana wallet
+ * signs once. Set DEMO_SKIP_PAYMENT=1 to upgrade without a wallet (test only).
  */
 
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
-import { Nummo } from "@usenummo/sdk";
+import { Nummo, NummoApiError } from "@usenummo/sdk";
 
 const nummo = new Nummo();
 const app = new Hono();
@@ -37,8 +37,14 @@ app.get("/api/me/:userId", async (c) => {
 
 app.post("/api/upgrade", async (c) => {
   const { userId } = await c.req.json<{ userId: string }>();
-  // M2 replaces skipPayment with a checkout URL where the wallet signs once.
-  return c.json(await nummo.attach({ customerId: userId, planId: "pro", skipPayment: true }));
+  const skipPayment = process.env.DEMO_SKIP_PAYMENT === "1";
+  try {
+    const successUrl = new URL("/?upgraded=1", c.req.url).toString();
+    return c.json(await nummo.attach({ customerId: userId, planId: "pro", successUrl, skipPayment }));
+  } catch (e) {
+    if (e instanceof NummoApiError) return c.json({ error: e.message }, 400);
+    throw e;
+  }
 });
 
 const port = Number(process.env.DEMO_PORT ?? 3000);
@@ -95,9 +101,12 @@ const PAGE = /* html */ `<!doctype html>
     refresh();
   };
   document.getElementById("up").onclick = async () => {
-    await fetch("/api/upgrade", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ userId }) });
-    add("", "Upgraded to Pro (test mode, no payment yet).");
+    const r = await fetch("/api/upgrade", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ userId }) });
+    const j = await r.json();
+    if (j.checkoutUrl) { location.assign(j.checkoutUrl); return; }
+    j.error ? add("bad", j.error) : add("", "Upgraded to Pro.");
     refresh();
   };
+  if (new URLSearchParams(location.search).has("upgraded")) add("", "Welcome to Pro. Your wallet signed once; renewals are collected automatically.");
   refresh();
 </script></body></html>`;

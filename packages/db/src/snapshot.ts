@@ -23,6 +23,12 @@ import { accruals, customers, grants, ledgerEntries, locks, planItems, planVersi
 
 export const LIVE_STATUSES = ["active", "past_due", "canceling"] as const;
 
+/**
+ * The time source for every customer transaction. Tests replace `now` to move
+ * through billing periods together with a fake chain.
+ */
+export const clock = { now: (): Date => new Date() };
+
 export type AccrualRow = typeof accruals.$inferSelect;
 
 export type CustomerCtx = {
@@ -216,7 +222,12 @@ export async function loadSnapshot(tx: Tx, scope: Scope, customerId: string, now
     grants: grantRows.map(rowToGrant),
     items,
     overageUsed: new Map([...current].map(([k, a]) => [k, qty(a.billableUnits) + qty(a.heldUnits)])),
-    overageBlocked: new Set(subRows.filter((r) => r.sub.status === "past_due").map((r) => r.sub.id)),
+    // Rule 6: no new overage while a payment is failing, or after a pull was cut to the on-chain ceiling.
+    overageBlocked: new Set(
+      subRows
+        .filter((r) => r.sub.status === "past_due" || (r.sub.overageBlockedUntil !== null && r.sub.overageBlockedUntil > now))
+        .map((r) => r.sub.id),
+    ),
   };
   return { snapshot, accruals: current, subscriptions: subRows };
 }
@@ -274,7 +285,7 @@ export async function inCustomerTx<T>(
   return db.transaction(async (tx) => {
     if (opts.create !== false) await ensureCustomer(tx, scope, customerId);
     await lockCustomer(tx, scope, customerId);
-    const now = new Date();
+    const now = clock.now();
     const catalog = await loadCatalog(tx, scope);
     await releaseExpiredLocks(tx, scope, customerId, now);
     let loaded = await loadSnapshot(tx, scope, customerId, now);

@@ -1,6 +1,6 @@
 # nummo: usage-based billing on Solana stablecoin rails
 
-Name: `nummo` (decided 2026-11-17; the working name was `bill`). Last updated: 2026-11-17. Status: milestone M1 built (see the repository [README](../README.md)); spikes S1 and S2 passed on devnet.
+Name: `nummo` (decided 2026-11-17; the working name was `bill`). Last updated: 2026-11-17. Status: milestones M1 (ledger core) and M2 (settlement on devnet) built, see the repository [README](../README.md); spikes S1 and S2 passed on devnet.
 
 ## Summary
 
@@ -34,10 +34,11 @@ Licence: Apache-2.0 (decided 2026-11-17). Still open: who holds the key that sig
 
 ## Start here next session
 
-1. Finish spike S3: decode the program's events from a transaction.
-2. Start milestone M2: `packages/solana`, checkout, settlement worker.
+1. Record the grant demo: the hosted checkout with a real wallet extension (Phantom, Solflare or Backpack on devnet, holding devnet USDC). The page has been driven in Chrome on devnet with a test wallet registered through the Wallet Standard, but not yet signed by a real extension, which might alter the transaction (the server would then refuse it).
+2. Start milestone M3: merchant dashboard, customer portal (cancel from the portal), top-ups, plan changes with proration.
+3. Finish spike S3 (decode program events) when moving the reconciler from polling to events.
 
-Done on 2026-11-17: S1 answered from the program source and its tests (D3 holds); monorepo scaffolded; M1 built (core rules with property tests, config, Postgres hot path, API, SDK with fail-open, demo).
+Done on 2026-11-17: S1 answered from the program source and its tests (D3 holds); monorepo scaffolded; M1 built (core rules with property tests, config, Postgres hot path, API, SDK with fail-open, demo); M2 built and its devnet scenarios passed (see the M2 results in [05-roadmap-and-grant.md](05-roadmap-and-grant.md#m2-results-2026-11-17)).
 
 ## Vocabulary
 

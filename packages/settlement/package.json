@@ -1,0 +1,22 @@
+{
+  "name": "@usenummo/settlement",
+  "version": "0.0.0",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "description": "Checkout, the settlement worker, the failed-payment state machine, the reconciler, verify, and the webhook dispatcher.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@usenummo/core": "workspace:*",
+    "@usenummo/db": "workspace:*",
+    "@usenummo/solana": "workspace:*",
+    "drizzle-orm": "^0.45.4",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.23.1",
+    "@usenummo/config": "workspace:*"
+  }
+}

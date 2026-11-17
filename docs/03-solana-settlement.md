@@ -83,7 +83,7 @@ Steps:
 
 Because the puller pays the fee, the customer needs USDC and no SOL.
 
-**Verify (spike S2):** the bundled transaction fits in one transaction with a fee payer other than the customer, and who pays rent for the two new accounts.
+**Spike S2 (2026-11-17): confirmed on devnet.** The bundle fits in one transaction with the puller as fee payer and rent payer; it costs the puller 0.00263636 SOL per new wallet. Milestone M2 repeated it for three wallets through the real checkout endpoints (20,653 to 35,653 compute units).
 
 ## Collecting each period
 
@@ -134,7 +134,26 @@ Customers can act on-chain without going through us: cancel from another interfa
 - **Events:** the program emits `SubscriptionCreatedEvent`, `SubscriptionCancelledEvent`, `SubscriptionResumedEvent`, `SubscriptionTransferEvent` and `PlanUpdatedEvent` through self-CPI. Subscribing to these through an RPC provider's webhooks gives near real-time updates. This is an optimisation; polling is the source of truth for the first version.
 - **Drift report:** a command that lists every difference between our records and the chain, like Autumn's `verify` endpoint does for Stripe.
 
-**Verify (spike S3):** decoding the program's events from a transaction with the published IDL.
+**Verify (spike S3):** decoding the program's events from a transaction with the published IDL. Still open; M2 reconciles by polling only.
+
+## How M2 implements this
+
+Code: `packages/solana` (chain access) and `packages/settlement` (everything that decides). Settings come from the environment so short devnet plans can be exercised; the defaults follow this document.
+
+| Topic | What the code does |
+| --- | --- |
+| Checkout | `attach` on a paid plan creates a `pending` subscription and a checkout session, and returns `/checkout/:id`. The page reads price, period and ceiling from the on-chain plan, connects a wallet through the Wallet Standard, and asks the server to build the transaction for that wallet. The server refuses up front if the wallet has no USDC account, too little USDC, or already has a subscription to the plan. The signed transaction must carry exactly the message bytes we built; then the puller co-signs and it is broadcast. |
+| Recording before sending | Every money-moving transaction is a row in `settlement_attempts` with its signature and `last_valid_block_height`, written before it is broadcast. A partial unique index refuses a second `pending` attempt for one invoice. |
+| Deciding an outcome | Confirmed or finalized: paid. Failed: classified (below). Unknown: still pending until the block height passes `last_valid_block_height`, then `expired`, and only then may a new transaction be signed. |
+| Renewal | Once a period boundary is 60 seconds old (`NUMMO_BOUNDARY_MARGIN`), a renewal invoice is written: the base fee, plus overage that was never invoiced. Unpaid overage lines from the last period move onto it; an unpaid base fee does not (fact 7). |
+| Overage | Accrued overage is invoiced once it reaches 5 USDC (`NUMMO_SETTLEMENT_THRESHOLD`), or whenever there is any and the period is within its close window (a tenth of the period, at most one hour). |
+| Ceiling | Before each pull, the on-chain record says what the period still allows. A larger invoice is cut to that, the rest is written off with a negative line, and overage is blocked until the period ends. |
+| Failures | SPL Token error 1 is `insufficient_funds`, 17 is `account_frozen`; program errors 508 (cancelled), 501 and 516 (plan ended) and 136 (stale authority) end the subscription; fee-payer and blockhash problems are `transient` and retried without touching the customer. Retries follow `NUMMO_RETRY_SCHEDULE` (default `1h,6h,24h,72h`, offsets from the first failure). A frozen account is not retried and ends when the grace period does. |
+| Reconciler | Every two minutes, and before every pull, each live paid subscription's record and its wallet's Subscription Authority are read. A cancellation sets `cancel_at` and moves the subscription to `canceling`; a resume clears it; a missing record or an authority that was closed or re-created ends it. |
+| Finality | `confirmed` counts as paid. Payments are re-checked until `finalized`; one whose transaction disappears is reverted and its invoice reopened. |
+| `verify` | Read-only. Compares each published plan (amount, period, mint, puller listed, end time) and each live subscription (record exists, authority valid, wallet, terms, cancellation, period anchor, and the amount we recorded for the chain's current period against `amountPulledInPeriod`). |
+
+Known gaps: rent sponsorship has no quota yet, so a plan with a zero base fee lets anyone with a checkout link make the puller pay rent for new records (the SDK README warns about this); and the checkout page has been driven in a browser with a test wallet but not yet by a real wallet extension. Some wallets add instructions to transactions they sign; the server refuses any change, so that needs checking per wallet.
 
 ## One-off purchases
 

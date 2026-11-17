@@ -164,9 +164,9 @@ describe("reservations (rule 8)", () => {
 });
 
 describe("paid plan with overage (test env, skipPayment)", () => {
-  test("paid plans need checkout unless skipPayment in test", async () => {
+  test("paid plans need a published on-chain plan unless skipPayment in test", async () => {
     const scope = await withExampleConfig(db);
-    await expect(attach(db, scope, { customerId: "u", planId: "pro" })).rejects.toMatchObject({ code: "checkout_required" });
+    await expect(attach(db, scope, { customerId: "u", planId: "pro" })).rejects.toMatchObject({ code: "plan_not_published" });
     await expect(attach(db, { ...scope, env: "live" }, { customerId: "u", planId: "pro", skipPayment: true })).rejects.toBeInstanceOf(NummoError);
   });
 

@@ -34,7 +34,7 @@
 | Core library | Pure functions for pricing, deduction order, proration and invoice building. No I/O, so it is easy to test. |
 | Settlement worker | Finds amounts that are due and pulls them on-chain. Handles retries and the failed-payment state machine. |
 | Reconciler | Reads on-chain accounts and events and corrects our records. This is what replaces Stripe webhooks. |
-| Web app | Hosted checkout and customer portal (wallet connect), and the merchant dashboard. |
+| Web app | Hosted checkout and customer portal (wallet connect), and the merchant dashboard. In M2 the checkout is one page served by the API; the rest arrives in M3. |
 | SDK and CLI | TypeScript client for the API, and a CLI that applies the pricing config. |
 | Webhook dispatcher | Delivers signed events to the merchant from an outbox table. |
 
@@ -46,7 +46,7 @@
 | Monorepo | pnpm workspaces | The Solana docs and SDKs use pnpm. |
 | API | Hono | Small, fast, runs on Node now and on edge runtimes later. |
 | Database | Postgres with Drizzle ORM | One datastore for the first version. Transactions and row locks give us correct concurrent deductions. |
-| Jobs | pg-boss | Queue and scheduler inside Postgres, so no Redis yet. |
+| Jobs | Loops guarded by Postgres advisory locks (M2); pg-boss when a real queue is needed | Inside Postgres, so no Redis yet. |
 | Solana | `@solana/kit`, `@solana/subscriptions`, `@solana-program/token` | The packages the official guides use. |
 | Local chain | Surfpool, then devnet | The Subscriptions docs describe local Surfpool workflows with the program at its real address. |
 | Web | Next.js, Wallet Standard | Checkout, portal and dashboard in one app. |
@@ -65,10 +65,12 @@ apps/
 packages/
   core/         pricing, deduction, proration, invoice building (pure)
   db/           schema, migrations, queries
-  solana/       settlement adapter: build, send and confirm transactions; read accounts
+  solana/       chain adapter: build, send and confirm transactions; read accounts; FakeChain for tests
+  settlement/   checkout, settlement worker, failed payments, reconciler, verify, webhook dispatcher
   sdk/          TypeScript client
   config/       feature() and plan() builders, config validation
-  cli/          push config, inspect customers
+  cli/          push config, publish plans, verify, inspect customers
+e2e/            scripted devnet scenarios
 docs/
 ```
 
@@ -92,7 +94,7 @@ Every table carries `org_id` (the merchant) and `env` (`test` for devnet, `live`
 | --- | --- |
 | `customers` | `id` (the merchant's own user id), `name`, `email` |
 | `customer_wallets` | `customer_id`, `address`, `verified_at` |
-| `subscriptions` | `customer_id`, `plan_version_id`, `wallet`, `subscription_pda`, `status`, `current_period_start`, `current_period_end`, `cancel_at_period_end` |
+| `subscriptions` | `customer_id`, `plan_version_id`, `wallet`, `subscription_pda`, `status`, `period_anchor` (periods are anchor + k × period), `cancel_at`, `past_due_since`, `retry_count`, `next_retry_at`, `overage_blocked_until`, `ended_reason` |
 
 **Ledger**
 
@@ -110,9 +112,11 @@ Every table carries `org_id` (the merchant) and `env` (`test` for devnet, `live`
 | --- | --- |
 | `invoices` | `customer_id`, `subscription_id`, `period_start`, `total`, `status` (open, paid, failed, void) |
 | `invoice_lines` | `invoice_id`, `kind` (base, overage, topup, proration), `feature_id`, `quantity`, `amount` |
-| `payments` | `invoice_id`, `signature`, `amount`, `status` (sent, confirmed, finalized, failed), `error` |
-| `settlement_attempts` | `invoice_id`, `attempt`, `signature`, `last_valid_block_height`, `outcome` |
-| `outbox` | `event_type`, `payload`, `delivered_at`, `attempts` |
+| `payments` | `invoice_id`, `signature`, `amount`, `status` (confirmed, finalized, reverted) |
+| `settlement_attempts` | `invoice_id` or `checkout_session_id`, `attempt`, `signature`, `last_valid_block_height`, `status` (pending, confirmed, failed, expired), `error_kind`, `onchain_period_start` |
+| `checkout_sessions` | `customer_id`, `plan_version_id`, `subscription_id`, `status` (open, submitted, completed, expired), `wallet`, `message`, `signature` |
+| `webhook_endpoints` | `url`, `secret` |
+| `outbox` | `event_type`, `payload`, `delivered_at`, `attempts`, `next_attempt_at`, `dead_at` |
 
 ## Ledger rules
 

@@ -1,0 +1,1 @@
+ALTER TABLE "accruals" ADD COLUMN "invoiced_units" numeric(38, 9) DEFAULT 0 NOT NULL;

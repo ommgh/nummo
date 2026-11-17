@@ -16,7 +16,10 @@
     "db:down": "docker compose down",
     "db:generate": "pnpm --filter @usenummo/db generate",
     "db:migrate": "pnpm --filter @usenummo/db migrate",
-    "dev:api": "pnpm --filter @usenummo/api dev"
+    "dev:api": "pnpm --filter @usenummo/api dev",
+    "dev:worker": "pnpm --filter @usenummo/worker dev",
+    "nummo": "node --env-file-if-exists=.env packages/cli/src/main.ts",
+    "e2e:devnet": "node --env-file-if-exists=.env e2e/devnet.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

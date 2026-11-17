@@ -45,6 +45,12 @@ export const ledgerReasonEnum = pgEnum("ledger_reason", [
   "release",
 ]);
 export const lockStatusEnum = pgEnum("lock_status", ["held", "confirmed", "released", "expired"]);
+export const checkoutStatusEnum = pgEnum("checkout_status", ["open", "submitted", "completed", "expired"]);
+export const invoiceKindEnum = pgEnum("invoice_kind", ["activation", "renewal", "overage"]);
+export const invoiceStatusEnum = pgEnum("invoice_status", ["open", "paid", "void", "uncollectible"]);
+export const invoiceLineKindEnum = pgEnum("invoice_line_kind", ["base", "overage", "writeoff"]);
+export const attemptStatusEnum = pgEnum("attempt_status", ["pending", "confirmed", "failed", "expired"]);
+export const paymentStatusEnum = pgEnum("payment_status", ["confirmed", "finalized", "reverted"]);
 
 const qty = (name: string) => numeric(name, { precision: 38, scale: 9 });
 const money = (name: string) => bigint(name, { mode: "bigint" });
@@ -132,6 +138,13 @@ export const planVersions = pgTable(
     ceilingAmount: money("ceiling_amount"),
     mint: text("mint").notNull().default("USDC"),
     onchainPlanPda: text("onchain_plan_pda"),
+    /** The u64 plan id the PDA is derived from, as a decimal string. */
+    onchainPlanId: text("onchain_plan_id"),
+    /** The merchant wallet that owns the on-chain plan and receives funds. */
+    onchainOwner: text("onchain_owner"),
+    /** The token mint address the on-chain plan charges in. */
+    mintAddress: text("mint_address"),
+    publishedAt: ts("published_at"),
     status: planVersionStatusEnum("status").notNull().default("active"),
     /** The plan document as last applied, for diffs in `nummo push`. */
     document: jsonb("document").notNull(),
@@ -200,8 +213,17 @@ export const subscriptions = pgTable(
     wallet: text("wallet"),
     subscriptionPda: text("subscription_pda"),
     cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+    /** When a cancellation signed on-chain takes effect (the record's expires_at). */
+    cancelAt: ts("cancel_at"),
+    /** Failed-payment state machine (doc 03, "When a pull fails"). */
+    pastDueSince: ts("past_due_since"),
+    retryCount: integer("retry_count").notNull().default(0),
+    nextRetryAt: ts("next_retry_at"),
+    /** Set when a pull was cut to what the on-chain ceiling had left; overage stops until then. */
+    overageBlockedUntil: ts("overage_blocked_until"),
     createdAt: ts("created_at").notNull().defaultNow(),
     endedAt: ts("ended_at"),
+    endedReason: text("ended_reason"),
   },
   (t) => [index("subscriptions_customer_idx").on(t.orgId, t.env, t.customerId)],
 );
@@ -311,14 +333,154 @@ export const accruals = pgTable(
     heldUnits: qty("held_units").notNull().default(sql`0`),
     /** overageCost(billable_units), in base units. */
     amount: money("amount").notNull().default(sql`0`),
-    /** Amount already collected on-chain (milestone M2). */
+    /** Amount already moved onto an invoice. amount - invoiced is still to bill. */
+    invoiced: money("invoiced").notNull().default(sql`0`),
+    /** billable_units already moved onto an invoice, so each line shows the units it bills. */
+    invoicedUnits: qty("invoiced_units").notNull().default(sql`0`),
+    /** Amount collected on-chain. */
     collected: money("collected").notNull().default(sql`0`),
     updatedAt: ts("updated_at").notNull().defaultNow(),
   },
   (t) => [uniqueIndex("accruals_uq").on(t.subscriptionId, t.periodStart, t.featureId)],
 );
 
+// ------------------------------------------------------------------ money
+
+/** A hosted checkout: the customer connects a wallet and signs the activation once (doc 03). */
+export const checkoutSessions = pgTable(
+  "checkout_sessions",
+  {
+    id: text("id").primaryKey(),
+    ...scope,
+    customerId: text("customer_id").notNull(),
+    planVersionId: text("plan_version_id")
+      .notNull()
+      .references(() => planVersions.id),
+    /** The pending subscription this checkout activates. */
+    subscriptionId: text("subscription_id").notNull(),
+    status: checkoutStatusEnum("status").notNull().default("open"),
+    /** First charge pulled inside the activation transaction (the base fee). */
+    amount: money("amount").notNull(),
+    wallet: text("wallet"),
+    /** The transaction message we built, base64. The signed copy must match it byte for byte. */
+    message: text("message"),
+    lastValidBlockHeight: bigint("last_valid_block_height", { mode: "bigint" }),
+    signature: text("signature"),
+    successUrl: text("success_url"),
+    error: text("error"),
+    createdAt: ts("created_at").notNull().defaultNow(),
+    expiresAt: ts("expires_at").notNull(),
+    completedAt: ts("completed_at"),
+  },
+  (t) => [index("checkout_sessions_status_idx").on(t.status)],
+);
+
+export const invoices = pgTable(
+  "invoices",
+  {
+    id: text("id").primaryKey(),
+    ...scope,
+    customerId: text("customer_id").notNull(),
+    subscriptionId: text("subscription_id").notNull(),
+    kind: invoiceKindEnum("kind").notNull(),
+    /** The billing period the invoice belongs to. */
+    periodStart: ts("period_start").notNull(),
+    total: money("total").notNull(),
+    amountPaid: money("amount_paid").notNull().default(sql`0`),
+    status: invoiceStatusEnum("status").notNull().default("open"),
+    createdAt: ts("created_at").notNull().defaultNow(),
+    paidAt: ts("paid_at"),
+  },
+  (t) => [
+    index("invoices_subscription_idx").on(t.subscriptionId, t.status),
+    index("invoices_customer_idx").on(t.orgId, t.env, t.customerId),
+    // One base-fee invoice per subscription and period, even if two workers race.
+    uniqueIndex("invoices_period_uq").on(t.subscriptionId, t.periodStart).where(sql`kind in ('activation', 'renewal')`),
+  ],
+);
+
+export const invoiceLines = pgTable(
+  "invoice_lines",
+  {
+    id: text("id").primaryKey(),
+    invoiceId: text("invoice_id")
+      .notNull()
+      .references(() => invoices.id, { onDelete: "cascade" }),
+    kind: invoiceLineKindEnum("kind").notNull(),
+    featureId: text("feature_id"),
+    quantity: qty("quantity"),
+    /** Signed: a write-off line is negative. */
+    amount: money("amount").notNull(),
+    accrualId: text("accrual_id"),
+  },
+  (t) => [index("invoice_lines_invoice_idx").on(t.invoiceId)],
+);
+
+/**
+ * Every transaction we sign that moves money: the activation and each pull.
+ * Recorded before it is broadcast, so a resend can be ruled out (doc 03,
+ * "Sending transactions safely").
+ */
+export const settlementAttempts = pgTable(
+  "settlement_attempts",
+  {
+    id: text("id").primaryKey(),
+    ...scope,
+    subscriptionId: text("subscription_id").notNull(),
+    invoiceId: text("invoice_id"),
+    checkoutSessionId: text("checkout_session_id"),
+    attempt: integer("attempt").notNull(),
+    signature: text("signature").notNull(),
+    amount: money("amount").notNull(),
+    lastValidBlockHeight: bigint("last_valid_block_height", { mode: "bigint" }).notNull(),
+    status: attemptStatusEnum("status").notNull().default("pending"),
+    errorKind: text("error_kind"),
+    errorCode: integer("error_code"),
+    error: text("error"),
+    /** The on-chain period the pull counted against, read back after confirmation. */
+    onchainPeriodStart: ts("onchain_period_start"),
+    createdAt: ts("created_at").notNull().defaultNow(),
+    resolvedAt: ts("resolved_at"),
+  },
+  (t) => [
+    uniqueIndex("settlement_attempts_sig_uq").on(t.signature),
+    // Never two unresolved transactions for one invoice: that is how a customer gets charged twice.
+    uniqueIndex("settlement_attempts_pending_uq").on(t.invoiceId).where(sql`status = 'pending'`),
+    index("settlement_attempts_status_idx").on(t.status),
+  ],
+);
+
+export const payments = pgTable(
+  "payments",
+  {
+    id: text("id").primaryKey(),
+    ...scope,
+    customerId: text("customer_id").notNull(),
+    subscriptionId: text("subscription_id").notNull(),
+    invoiceId: text("invoice_id").notNull(),
+    signature: text("signature").notNull(),
+    amount: money("amount").notNull(),
+    status: paymentStatusEnum("status").notNull().default("confirmed"),
+    createdAt: ts("created_at").notNull().defaultNow(),
+    finalizedAt: ts("finalized_at"),
+  },
+  (t) => [uniqueIndex("payments_sig_uq").on(t.signature), index("payments_invoice_idx").on(t.invoiceId)],
+);
+
 // ------------------------------------------------------------------ webhooks
+
+export const webhookEndpoints = pgTable(
+  "webhook_endpoints",
+  {
+    id: text("id").primaryKey(),
+    ...scope,
+    url: text("url").notNull(),
+    secret: text("secret").notNull(),
+    createdAt: ts("created_at").notNull().defaultNow(),
+    disabledAt: ts("disabled_at"),
+  },
+  (t) => [uniqueIndex("webhook_endpoints_scope_uq").on(t.orgId, t.env).where(sql`disabled_at is null`)],
+);
 
 export const outbox = pgTable(
   "outbox",
@@ -331,6 +493,9 @@ export const outbox = pgTable(
     deliveredAt: ts("delivered_at"),
     attempts: integer("attempts").notNull().default(0),
     nextAttemptAt: ts("next_attempt_at").notNull().defaultNow(),
+    lastError: text("last_error"),
+    /** Set when delivery gave up after the last retry. */
+    deadAt: ts("dead_at"),
   },
-  (t) => [index("outbox_pending_idx").on(t.nextAttemptAt).where(sql`delivered_at is null`)],
+  (t) => [index("outbox_pending_idx").on(t.nextAttemptAt).where(sql`delivered_at is null and dead_at is null`)],
 );

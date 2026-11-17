@@ -14,6 +14,9 @@ export default defineConfig({
       {
         test: {
           name: "db",
+          // Its own database, so test rows never reach a worker settling the development database.
+          globalSetup: ["./test/db-setup.ts"],
+          env: { DATABASE_URL: process.env.TEST_DATABASE_URL ?? "postgres://nummo:nummo@localhost:5434/nummo_test" },
           include: ["packages/*/test/**/*.db.test.ts", "apps/*/test/**/*.db.test.ts"],
           // These share one Postgres database.
           fileParallelism: false,

@@ -1,0 +1,16 @@
+{
+  "name": "@usenummo/worker",
+  "version": "0.0.0",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "description": "Settlement worker, reconciler and webhook dispatcher.",
+  "scripts": {
+    "dev": "node --env-file-if-exists=../../.env --watch src/main.ts",
+    "start": "node --env-file-if-exists=../../.env src/main.ts"
+  },
+  "dependencies": {
+    "@usenummo/db": "workspace:*",
+    "@usenummo/settlement": "workspace:*"
+  }
+}

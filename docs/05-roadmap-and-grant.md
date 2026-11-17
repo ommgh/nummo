@@ -48,6 +48,30 @@ Done when:
 - Renewal, overage collection, cancellation and a failed payment all behave as described, on a plan with a short period.
 - `nummo verify` reports no drift after each scenario.
 
+#### M2 results (2026-11-17)
+
+Built: `packages/solana` (the `Chain` interface, `SolanaChain` over `@solana/kit`, and an in-memory `FakeChain` that follows the program's rules), `packages/settlement` (checkout, settlement worker, failed-payment state machine, reconciler, `verify`, webhook dispatcher), `apps/worker`, `packages/cli` (`push`, `plans`, `plans publish`, `verify`, `customers get`), the hosted checkout page, and `e2e/devnet.ts`.
+
+All three done-when criteria were met on devnet by `e2e/devnet.ts`, on a plan of 2 USDC per hour with overage capped at 5 USDC (ceiling 7):
+
+| Scenario | Result |
+| --- | --- |
+| Activation | Three wallets holding USDC and no SOL each signed once. The puller paid fees and rent, 0.00263636 SOL per activation; the activation used 20,653 to 35,653 compute units. |
+| Overage | 1.50 USDC accrued past the 1 USDC threshold and was pulled in one transaction (about 6,100 compute units). |
+| Failed payment | A wallet with 0.50 USDC owing 1.50 went `past_due` (SPL Token error 1, classified `insufficient_funds`), overage was blocked, three retries failed on schedule, and the customer fell back to the free plan. |
+| Cancellation | `cancelSubscription` signed outside nummo; `verify` reported the drift, the reconciler moved the subscription to `canceling` with the on-chain end time, and `verify` was clean again. |
+| Webhooks | 24 events delivered with valid `X-Nummo-Signature` headers. |
+| Checkout page | Driven in Chrome against devnet (`e2e/checkout-page.ts`) with a test wallet registered through the Wallet Standard events: the page listed it beside the installed Backpack extension, connected, had it sign, submitted, and redirected to the success URL. The activation landed and `verify` was clean. |
+| Renewal | One settlement pass after the 1-hour boundary pulled 2 USDC from alice; the on-chain period advanced to the start we computed, with 2 USDC counted in it, and her credits reset to 100. Carol's cancelled subscription ended at the period end with no pull, and she fell back to the free plan. |
+| `nummo verify` | No drift after each scenario (one expected notice: an ended subscription's on-chain record stays open). |
+
+Differences from the plan, decided during the build:
+
+- **Checkout lives in the API** as one server-rendered page (`/checkout/:id`) using the Wallet Standard's window events, with no bundler. The Next.js web app arrives with the dashboard and portal in M3.
+- **Jobs are three loops with Postgres advisory locks**, not pg-boss. Nothing yet needs a queue; two workers can run safely.
+- **Settlement tests use `FakeChain` against real Postgres**, plus the scripted devnet run, instead of Surfpool, which is not installed here. `FakeChain` is pinned to the S1 observations by a unit test.
+- **Test databases are separate:** the db suite uses `nummo_test` and the devnet script `nummo_e2e`, because a worker settles every org in an environment.
+
 ### M3. Product surface and mainnet (about 2 weeks)
 
 Build:
@@ -80,7 +104,7 @@ Done when:
 | --- | --- |
 | Ledger rules | Property tests with fast-check: for any sequence of grants, usage, locks and resets, the balance equals grants minus usage, never goes negative without overage, and replaying the same idempotency key changes nothing. |
 | Concurrency | Parallel requests against a real Postgres. |
-| Settlement | Integration tests against Surfpool with the Subscriptions program loaded, using short periods. |
+| Settlement | Integration tests against real Postgres with `FakeChain`, which follows the program's rules (`packages/settlement/test`). Surfpool with the program loaded is the next step up. |
 | End to end | Scripted scenarios on devnet: subscribe, renew, overage, cancel, fail, recover. |
 | Money maths | Table-driven tests for proration and rounding. Overage rounds up to the next base unit per invoice line. |
 

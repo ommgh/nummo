@@ -48,7 +48,7 @@ Decision D3 holds. Devnet run on 2026-11-17, plan of 70 tokens per 1 hour on a 6
 
 ### S2. One-signature activation: yes, confirmed on devnet
 
-One transaction with `initSubscriptionAuthority` + `subscribe` (with `UNKNOWN_INIT_ID`) + the first `transferSubscription` of 20 landed (`3yEvkkUj…`). The subscriber signed and holds **zero SOL**; the puller was fee payer and rent payer for both new accounts and spent **0.00263636 SOL** in total. The subscription record's `header.payer` is the puller. No compute-budget instructions were needed on devnet; mainnet should still set a priority fee.
+One transaction with `initSubscriptionAuthority` + `subscribe` (with `UNKNOWN_INIT_ID`) + the first `transferSubscription` of 20 landed (`3yEvkkUj…`). The subscriber signed and holds **zero SOL**; the puller was fee payer and rent payer for both new accounts and spent **0.00263636 SOL** in total. The subscription record's `header.payer` is the puller. No compute-budget instructions were needed on devnet; mainnet should still set a priority fee. Milestone M2 measured 20,653 to 35,653 compute units for the activation and about 6,100 for a pull, and sets limits of 100,000 and 20,000.
 
 ### S3. Reading state and events: partly answered
 

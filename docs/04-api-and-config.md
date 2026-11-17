@@ -67,12 +67,15 @@ Rules:
 
 | Command | What it does |
 | --- | --- |
-| `nummo login` | Stores an API key for the test or live environment. |
+| `nummo login` | Stores an API key for the test or live environment. Not built yet; the CLI reads `NUMMO_SECRET_KEY`. |
 | `nummo push` | Shows a diff between the file and what is deployed, then applies it on confirmation. |
 | `nummo push --yes` | Applies without asking. For CI. |
-| `nummo plans publish` | Creates the on-chain plan for any new paid plan version. Needs the merchant wallet's signature. |
-| `nummo customers get <id>` | Prints a customer's plan, balances and recent usage. |
-| `nummo verify` | Compares our records with the chain and lists differences. |
+| `nummo plans` | Lists plan versions with their on-chain ceiling and whether they are published. |
+| `nummo plans publish --keypair <file>` | Creates the on-chain plan for any new paid plan version, signed by the merchant wallet, and registers it. The server checks the plan on-chain (ceiling, period, mint, puller, destination) before accepting it. |
+| `nummo customers get <id>` | Prints a customer's plans, balances and invoices. |
+| `nummo verify` | Compares our records with the chain and lists differences. Exits 1 on drift. |
+
+In the repository the CLI is `pnpm nummo <command>` (package `packages/cli`); it will be published as the unscoped `nummo` package.
 
 Publishing a plan on-chain needs the merchant's wallet, so it is a separate step from `push`. The dashboard offers the same step with a browser wallet.
 
@@ -97,8 +100,9 @@ if (result.checkoutUrl) redirect(result.checkoutUrl);
 ```
 
 - Free plan: attached at once, no URL returned.
-- Paid plan: returns a checkout URL where the customer connects a wallet and signs once.
-- Customer already on a paid plan: returns a checkout URL for the upgrade or downgrade.
+- Paid plan: returns `status: "pending"` and a checkout URL where the customer connects a wallet and signs once. The plan version must be published on-chain first (`plan_not_published` otherwise). Calling `attach` again while the checkout is open returns the same URL.
+- Customer already on a paid plan: returns a checkout URL for the upgrade or downgrade (milestone M3; until then `not_implemented`).
+- Test environment only: `skipPayment: true` activates a paid plan without a wallet, for tests and demos.
 
 `nummo.preview({ customerId, planId })` returns what would be charged today and the new ceiling, without changing anything.
 
@@ -198,18 +202,25 @@ All endpoints take a bearer API key. Bodies are JSON. Amounts are strings of bas
 | `POST /v1/balances` | Grant a balance by hand |
 | `POST /v1/topups` | Start a one-off purchase |
 | `POST /v1/portal` | Create a portal session |
-| `GET /v1/customers/:id` | Customer with subscriptions and balances |
+| `GET /v1/customers/:id` | Customer with subscriptions, balances and recent invoices |
 | `PUT /v1/customers/:id` | Create or update a customer |
-| `GET /v1/customers/:id/invoices` | Invoices and payments |
+| `GET /v1/customers/:id/invoices` | Invoices with their lines and payments (transaction signatures) |
 | `GET /v1/events` | Usage events, filtered by customer, feature and time |
 | `PUT /v1/config` | Apply a pricing config (used by the CLI) |
+| `GET /v1/plans` | Plan versions, their on-chain terms, and the deployment's network, mint and puller |
+| `POST /v1/plans/:planId/versions/:version/publish` | Register the on-chain plan created for a version, `{ "address" }`. Checked on-chain first. |
 | `GET /v1/verify` | Differences between our records and the chain |
+| `GET`, `PUT`, `DELETE /v1/webhook` | The webhook endpoint, `{ "url" }`. `PUT` returns the signing secret. |
+
+The hosted checkout is public and keyed only by its long random session id, like a payment link: `GET /checkout/:id` (the page), `GET /checkout/:id/session`, `POST /checkout/:id/transaction { wallet }` (returns the unsigned transaction), and `POST /checkout/:id/submit { signedTransaction }`. `GET /p/:id` serves the on-chain plan's metadata.
+
+Settlement endpoints answer `503 settlement_unavailable` when the server has no puller key for the environment (`NUMMO_TEST_PULLER_KEY`, `NUMMO_LIVE_PULLER_KEY`).
 
 Errors use a consistent body: `{ "error": { "code": "insufficient_balance", "message": "..." } }`. A `check` that is refused is a 200 with `allowed: false`, not an error.
 
 ## Webhook events
 
-Delivered as `POST` with a JSON body and an `X-Nummo-Signature` header (HMAC-SHA256 of the body with the endpoint's secret).
+Delivered as `POST` with a JSON body `{ id, type, env, createdAt, data }` and an `X-Nummo-Signature: t=<unix seconds>,v1=<hex>` header, where `v1` is the HMAC-SHA256 of `"<t>.<raw body>"` with the endpoint's secret. Signing the timestamp lets receivers reject replays; `verifyWebhook(rawBody, header, secret)` in the SDK does the check. Failed deliveries retry with backoff from 10 seconds up to 6 hours, 12 attempts in all. Only events created after the endpoint was registered are sent.
 
 | Event | When |
 | --- | --- |
@@ -217,6 +228,7 @@ Delivered as `POST` with a JSON body and an `X-Nummo-Signature` header (HMAC-SHA
 | `subscription.renewed` | A period's base fee was collected |
 | `subscription.past_due` | A pull failed and retries have started |
 | `subscription.canceled` | The customer signed a cancellation; includes the end time |
+| `subscription.resumed` | The customer resumed a cancelled subscription before it ended |
 | `subscription.ended` | Entitlements removed |
 | `payment.succeeded` | Any pull or purchase confirmed; includes the transaction signature |
 | `payment.failed` | A pull failed; includes the reason |

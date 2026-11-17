@@ -56,7 +56,7 @@ describe("API through the SDK", () => {
     expect(customer.subscriptions[0]).toMatchObject({ planId: "free", status: "active" });
     expect(customer.balances[0]).toMatchObject({ featureId: "credits", balance: "65" });
 
-    await expect(nummo.attach({ customerId: "user_123", planId: "pro" })).rejects.toMatchObject({ code: "checkout_required", status: 501 });
+    await expect(nummo.attach({ customerId: "user_123", planId: "pro" })).rejects.toMatchObject({ code: "plan_not_published", status: 409 });
   });
 
   test("validation errors are 400 invalid_request", async () => {
@@ -83,5 +83,61 @@ describe("API through the SDK", () => {
     expect(nummo.pending).toBe(0);
     const c = await nummo.customers.get("offline");
     expect(c.balances[0]!.balance).toBe("97");
+  });
+});
+
+describe("settlement routes", () => {
+  test("publish, checkout through the public routes, verify, webhook endpoint", async () => {
+    const { FakeChain } = await import("@usenummo/solana/testing");
+    const { planIdSeed } = await import("@usenummo/settlement");
+    const chain = new FakeChain({ now: new Date() });
+    const orgId = await createOrg(db, "api settlement test");
+    const k = (await createApiKey(db, orgId, "test")).key;
+    const srv = serve({ fetch: createApp(db, { chains: { test: chain } }).fetch, port: 0 });
+    await new Promise((r) => srv.once("listening", r));
+    const url = `http://127.0.0.1:${(srv.address() as AddressInfo).port}`;
+    try {
+      const nummo = new Nummo({ secretKey: k, baseUrl: url });
+      await nummo.config.push(toDocument(exampleConfig));
+      const plans = await nummo.plans.list();
+      const pro = plans.versions.find((v) => v.planId === "pro")!;
+      expect(plans.settlement?.puller).toBe(chain.pullerAddress);
+      expect(pro.onchainTerms).toMatchObject({ ceiling: "70", periodHours: 720 });
+
+      // A plan with the wrong ceiling is refused; the right one is accepted.
+      const wrong = chain.createPlan({ owner: "m", planId: 1n, amount: 1n, periodHours: 720 });
+      await expect(nummo.plans.publish("pro", 1, wrong.address.padEnd(32, "x"))).rejects.toMatchObject({ code: "invalid_request" });
+      const right = chain.createPlan({ owner: "merchant_wallet_for_api_test", planId: planIdSeed({ orgId, env: "test" }, "pro", 1), amount: 70_000_000n, periodHours: 720 });
+      await nummo.plans.publish("pro", 1, right.address);
+
+      const a = await nummo.attach({ customerId: "buyer", planId: "pro", successUrl: "https://shop.example/ok" });
+      expect(a.status).toBe("pending");
+      const path = new URL(a.checkoutUrl!).pathname;
+      expect((await fetch(`${url}${path}`)).headers.get("content-type")).toContain("text/html");
+      const session = await (await fetch(`${url}${path}/session`)).json();
+      expect(session).toMatchObject({ status: "open", firstCharge: "20", onchain: { ceiling: "70", period: "every 30 days" } });
+
+      const wallet = chain.wallet(100_000_000n);
+      const post = (p: string, b: unknown) => fetch(`${url}${path}${p}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(b) });
+      const { transaction } = await (await post("/transaction", { wallet })).json();
+      const done = await (await post("/submit", { signedTransaction: chain.walletSign(transaction, wallet) })).json();
+      expect(done).toMatchObject({ status: "completed", successUrl: "https://shop.example/ok" });
+
+      const c = await nummo.customers.get("buyer");
+      expect(c.subscriptions.find((s) => s.status === "active")).toMatchObject({ planId: "pro", wallet });
+      expect((await nummo.customers.invoices("buyer")).invoices[0]).toMatchObject({ kind: "activation", status: "paid", total: "20" });
+      expect(await nummo.verify()).toMatchObject({ ok: true, network: "fake" });
+
+      const { endpoint } = await nummo.webhooks.set("https://shop.example/hooks");
+      expect(endpoint.secret).toMatch(/^whsec_/);
+      expect((await nummo.webhooks.get()).endpoint?.url).toBe("https://shop.example/hooks");
+    } finally {
+      await new Promise((r) => srv.close(r));
+    }
+  });
+
+  test("without a chain, settlement routes say so instead of failing open", async () => {
+    const nummo = new Nummo({ secretKey: key, baseUrl });
+    await expect(nummo.verify()).rejects.toMatchObject({ code: "settlement_unavailable", status: 503 });
   });
 });

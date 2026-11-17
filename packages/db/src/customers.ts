@@ -2,14 +2,15 @@
  * Customers, attaching plans, manual grants, and customer reads.
  */
 
-import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, desc, eq, gt, gte, inArray, lte } from "drizzle-orm";
 import { formatBaseUnits, formatQty, isActive, periodAt, poolBalance, qty } from "@usenummo/core";
-import type { Db, Scope } from "./client.ts";
+import type { Db, DbOrTx, Scope } from "./client.ts";
 import { findPlanVersion } from "./catalog.ts";
 import { NummoError } from "./errors.ts";
 import { newId } from "./ids.ts";
-import { customers, grants, plans, planVersions, subscriptions, usageEvents } from "./schema.ts";
-import { ensureCustomer, inCustomerTx, LIVE_STATUSES, refresh } from "./snapshot.ts";
+import { checkoutSessions, customers, grants, invoiceLines, invoices, payments, plans, planVersions, subscriptions, usageEvents } from "./schema.ts";
+import { ensureCustomer, inCustomerTx, refresh } from "./snapshot.ts";
+import { endSubscription, isPaid, liveSubscriptions, replacedBy } from "./subscriptions.ts";
 
 export type CustomerInput = { id: string; name?: string | null; email?: string | null };
 
@@ -85,14 +86,19 @@ export async function getCustomer(db: Db, scope: Scope, customerId: string) {
             ceiling: pv.ceilingAmount !== null ? formatBaseUnits(pv.ceilingAmount) : null,
             currentPeriodStart: period?.start.toISOString() ?? null,
             currentPeriodEnd: period?.end.toISOString() ?? null,
-            cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
+            cancelAtPeriodEnd: sub.cancelAt !== null,
+            cancelAt: sub.cancelAt?.toISOString() ?? null,
+            wallet: sub.wallet,
+            subscriptionAddress: sub.subscriptionPda,
+            pastDueSince: sub.pastDueSince?.toISOString() ?? null,
+            nextRetryAt: sub.nextRetryAt?.toISOString() ?? null,
+            endedReason: sub.endedReason,
             createdAt: sub.createdAt.toISOString(),
             endedAt: sub.endedAt?.toISOString() ?? null,
           };
         }),
         balances,
-        // Invoices arrive with settlement in milestone M2.
-        invoices: [] as unknown[],
+        invoices: await listInvoices(ctx.tx, scope, customerId, 20),
       };
     },
     { create: false },
@@ -103,55 +109,91 @@ export type AttachInput = {
   customerId: string;
   planId: string;
   version?: number;
+  /** Where the checkout sends the customer after a successful payment. */
+  successUrl?: string;
   /**
-   * Test environment only: activate a paid plan without a payment. Stands in
-   * for checkout until milestone M2.
+   * Test environment only: activate a paid plan without a payment. Useful for
+   * tests and demos without a wallet.
    */
   skipPayment?: boolean;
 };
 
-/** POST /v1/attach. Free plans attach at once; paid plans need checkout (milestone M2). */
-export async function attach(db: Db, scope: Scope, input: AttachInput) {
+/** How long a checkout link stays usable. */
+export const CHECKOUT_TTL_MS = 24 * 3_600_000;
+
+/**
+ * POST /v1/attach. Free plans attach at once. Paid plans create a pending
+ * subscription and a checkout session where the customer signs once (doc 03,
+ * "Activation: one signature").
+ */
+export async function attach(db: Db, scope: Scope, input: AttachInput, opts: { publicUrl?: string } = {}) {
+  const publicUrl = (opts.publicUrl ?? process.env.NUMMO_PUBLIC_URL ?? "http://localhost:8787").replace(/\/$/, "");
   return inCustomerTx(db, scope, input.customerId, async (ctx) => {
     const pv = await findPlanVersion(ctx.tx, scope, input.planId, input.version);
     const [plan] = await ctx.tx
       .select()
       .from(plans)
       .where(and(eq(plans.orgId, scope.orgId), eq(plans.env, scope.env), eq(plans.id, pv.planId)));
-    const paid = pv.ceilingAmount !== null;
-    if (paid && !(input.skipPayment && scope.env === "test")) {
-      throw new NummoError(
-        "checkout_required",
-        `plan ${pv.planId} is paid; wallet checkout arrives in milestone M2. In the test environment, pass skipPayment: true.`,
-      );
-    }
-
-    const live = await ctx.tx
-      .select({ sub: subscriptions, pv: planVersions, plan: plans })
-      .from(subscriptions)
-      .innerJoin(planVersions, eq(planVersions.id, subscriptions.planVersionId))
-      .innerJoin(plans, and(eq(plans.orgId, planVersions.orgId), eq(plans.env, planVersions.env), eq(plans.id, planVersions.planId)))
-      .where(
-        and(
-          eq(subscriptions.orgId, scope.orgId),
-          eq(subscriptions.env, scope.env),
-          eq(subscriptions.customerId, input.customerId),
-          inArray(subscriptions.status, [...LIVE_STATUSES]),
-        ),
-      );
+    const live = await liveSubscriptions(ctx);
 
     const same = live.find((l) => l.pv.id === pv.id);
     if (same) return { subscriptionId: same.sub.id, status: same.sub.status, checkoutUrl: null, alreadyAttached: true };
 
-    // A customer has one main plan; add-ons stack. Replace the main plan, or the same add-on's older version.
-    const replaced = live.filter((l) => (plan!.isAddon ? l.pv.planId === pv.planId : !l.plan.isAddon));
-    for (const r of replaced) {
-      await ctx.tx.update(subscriptions).set({ status: "ended", endedAt: ctx.now }).where(eq(subscriptions.id, r.sub.id));
-      // End the old plan's grants now; their leftovers get expiry entries on the next reconcile.
-      await ctx.tx
-        .update(grants)
-        .set({ expiresAt: ctx.now })
-        .where(and(eq(grants.subscriptionId, r.sub.id), eq(grants.source, "plan")));
+    const replaced = replacedBy(live, pv, plan!.isAddon);
+    const paid = isPaid(pv);
+    const skip = paid && input.skipPayment === true && scope.env === "test";
+
+    if (paid && !skip) {
+      if (replaced.some((r) => isPaid(r.pv))) {
+        throw new NummoError("not_implemented", "changing between paid plans (upgrade, downgrade) arrives in milestone M3");
+      }
+      if (!pv.onchainPlanPda) {
+        throw new NummoError(
+          "plan_not_published",
+          `plan ${pv.planId} v${pv.version} has no on-chain plan yet. Run \`nummo plans publish\` with the merchant wallet.`,
+        );
+      }
+      // Reuse an open checkout for the same plan version, so retries do not pile up pending subscriptions.
+      const [open] = await ctx.tx
+        .select()
+        .from(checkoutSessions)
+        .where(
+          and(
+            eq(checkoutSessions.orgId, scope.orgId),
+            eq(checkoutSessions.env, scope.env),
+            eq(checkoutSessions.customerId, input.customerId),
+            eq(checkoutSessions.planVersionId, pv.id),
+            inArray(checkoutSessions.status, ["open", "submitted"]),
+            gt(checkoutSessions.expiresAt, ctx.now),
+          ),
+        )
+        .limit(1);
+      if (open) {
+        return { subscriptionId: open.subscriptionId, status: "pending" as const, checkoutUrl: `${publicUrl}/checkout/${open.id}`, alreadyAttached: false };
+      }
+
+      const subscriptionId = newId("sub");
+      await ctx.tx.insert(subscriptions).values({
+        id: subscriptionId,
+        ...scope,
+        customerId: input.customerId,
+        planVersionId: pv.id,
+        status: "pending",
+        // Replaced by the on-chain period start when the activation confirms.
+        periodAnchor: ctx.now,
+      });
+      const sessionId = newId("cs");
+      await ctx.tx.insert(checkoutSessions).values({
+        id: sessionId,
+        ...scope,
+        customerId: input.customerId,
+        planVersionId: pv.id,
+        subscriptionId,
+        amount: pv.baseAmount,
+        successUrl: input.successUrl ?? null,
+        expiresAt: new Date(ctx.now.getTime() + CHECKOUT_TTL_MS),
+      });
+      return { subscriptionId, status: "pending" as const, checkoutUrl: `${publicUrl}/checkout/${sessionId}`, alreadyAttached: false };
     }
 
     const id = newId("sub");
@@ -163,9 +205,48 @@ export async function attach(db: Db, scope: Scope, input: AttachInput) {
       status: "active",
       periodAnchor: ctx.now,
     });
+    for (const r of replaced) await endSubscription(ctx, r.sub.id, "replaced");
     await refresh(ctx);
     return { subscriptionId: id, status: "active" as const, checkoutUrl: null, alreadyAttached: false, replaced: replaced.map((r) => r.sub.id) };
   });
+}
+
+/** GET /v1/customers/:id/invoices, and the `invoices` field of a customer read. */
+export async function listInvoices(tx: DbOrTx, scope: Scope, customerId: string, limit = 50) {
+  const rows = await tx
+    .select()
+    .from(invoices)
+    .where(and(eq(invoices.orgId, scope.orgId), eq(invoices.env, scope.env), eq(invoices.customerId, customerId)))
+    .orderBy(desc(invoices.createdAt))
+    .limit(limit);
+  if (rows.length === 0) return [];
+  const ids = rows.map((r) => r.id);
+  const [lines, pays] = await Promise.all([
+    tx.select().from(invoiceLines).where(inArray(invoiceLines.invoiceId, ids)),
+    tx.select().from(payments).where(inArray(payments.invoiceId, ids)),
+  ]);
+  return rows.map((r) => ({
+    id: r.id,
+    subscriptionId: r.subscriptionId,
+    kind: r.kind,
+    status: r.status,
+    periodStart: r.periodStart.toISOString(),
+    total: formatBaseUnits(r.total),
+    amountPaid: formatBaseUnits(r.amountPaid),
+    createdAt: r.createdAt.toISOString(),
+    paidAt: r.paidAt?.toISOString() ?? null,
+    lines: lines
+      .filter((l) => l.invoiceId === r.id)
+      .map((l) => ({
+        kind: l.kind,
+        featureId: l.featureId,
+        quantity: l.quantity === null ? null : formatQty(qty(l.quantity)),
+        amount: formatBaseUnits(l.amount),
+      })),
+    payments: pays
+      .filter((p) => p.invoiceId === r.id)
+      .map((p) => ({ signature: p.signature, amount: formatBaseUnits(p.amount), status: p.status, createdAt: p.createdAt.toISOString() })),
+  }));
 }
 
 export type GrantInput = {

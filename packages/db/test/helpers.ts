@@ -6,7 +6,7 @@ let shared: ReturnType<typeof createDb> | null = null;
 let migrated = false;
 
 export async function testDb(): Promise<Db> {
-  shared ??= createDb(process.env.DATABASE_URL ?? "postgres://nummo:nummo@localhost:5434/nummo");
+  shared ??= createDb(process.env.DATABASE_URL ?? "postgres://nummo:nummo@localhost:5434/nummo_test");
   if (!migrated) {
     await runMigrations(shared.db);
     migrated = true;

@@ -9,7 +9,13 @@ export type ErrorCode =
   | "lock_expired"
   | "lock_finalized"
   | "version_required"
-  | "checkout_required"
+  | "plan_not_published"
+  | "checkout_not_found"
+  | "checkout_closed"
+  | "wallet_not_ready"
+  | "activation_rejected"
+  | "settlement_unavailable"
+  | "not_found"
   | "invalid_config"
   | "rate_limited"
   | "not_implemented"
@@ -26,7 +32,13 @@ const STATUS: Record<ErrorCode, number> = {
   lock_expired: 409,
   lock_finalized: 409,
   version_required: 409,
-  checkout_required: 501,
+  plan_not_published: 409,
+  checkout_not_found: 404,
+  checkout_closed: 409,
+  wallet_not_ready: 400,
+  activation_rejected: 400,
+  settlement_unavailable: 503,
+  not_found: 404,
   invalid_config: 400,
   rate_limited: 429,
   not_implemented: 501,

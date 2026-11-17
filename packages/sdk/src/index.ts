@@ -146,8 +146,10 @@ export class Nummo {
     }
     const text = await res.text();
     const json = text ? JSON.parse(text) : {};
-    // 501 is a definite answer (not built yet), not an outage, so it must not fail open.
-    if (res.status >= 500 && res.status !== 501) throw new NummoUnavailableError(`nummo API error ${res.status}: ${json?.error?.message ?? text}`);
+    // 501 (not built yet) and settlement_unavailable (not configured) are definite answers, not outages,
+    // so they must not fail open.
+    const definite = res.status === 501 || json?.error?.code === "settlement_unavailable";
+    if (res.status >= 500 && !definite) throw new NummoUnavailableError(`nummo API error ${res.status}: ${json?.error?.message ?? text}`);
     if (!res.ok) throw new NummoApiError(res.status, json?.error?.code ?? "unknown", json?.error?.message ?? text);
     return json as T;
   }
@@ -238,9 +240,36 @@ export class Nummo {
     return this.flushing;
   }
 
+  /**
+   * Put a customer on a plan. Free plans attach at once. A paid plan returns a
+   * `checkoutUrl` where the customer connects a wallet and signs once.
+   */
   attach(p: { customerId: string; planId: string; version?: number; successUrl?: string; skipPayment?: boolean }) {
-    return this.request<{ subscriptionId: string; status: string; checkoutUrl: string | null }>("POST", "/v1/attach", p);
+    return this.request<{ subscriptionId: string; status: string; checkoutUrl: string | null; alreadyAttached?: boolean }>("POST", "/v1/attach", p);
   }
+
+  /** Compare nummo's records with the chain (doc 04, `nummo verify`). */
+  verify() {
+    return this.request<VerifyReport>("GET", "/v1/verify");
+  }
+
+  readonly plans = {
+    list: () => this.request<PlanList>("GET", "/v1/plans"),
+    /** Register the on-chain plan created for a plan version; the server checks its terms on-chain first. */
+    publish: (planId: string, version: number, address: string) =>
+      this.request<{ planId: string; version: number; address: string; owner: string; mint: string }>(
+        "POST",
+        `/v1/plans/${encodeURIComponent(planId)}/versions/${version}/publish`,
+        { address },
+      ),
+  };
+
+  readonly webhooks = {
+    get: () => this.request<{ endpoint: WebhookEndpoint | null }>("GET", "/v1/webhook"),
+    /** Set the endpoint events are POSTed to. Returns the signing secret. Replaces any previous endpoint. */
+    set: (url: string) => this.request<{ endpoint: WebhookEndpoint }>("PUT", "/v1/webhook", { url }),
+    remove: () => this.request<{ endpoint: null }>("DELETE", "/v1/webhook"),
+  };
 
   readonly balances = {
     finalize: (p: { lockId: string; action: "confirm" | "release"; overrideValue?: Quantity; properties?: Record<string, unknown> }) =>
@@ -254,6 +283,7 @@ export class Nummo {
 
   readonly customers = {
     get: (id: string) => this.request<Customer>("GET", `/v1/customers/${encodeURIComponent(id)}`),
+    invoices: (id: string) => this.request<{ invoices: Invoice[] }>("GET", `/v1/customers/${encodeURIComponent(id)}/invoices`),
     upsert: (id: string, p: { name?: string | null; email?: string | null } = {}) =>
       this.request<Customer>("PUT", `/v1/customers/${encodeURIComponent(id)}`, p),
   };
@@ -284,6 +314,13 @@ export type Customer = {
     ceiling: string | null;
     currentPeriodStart: string | null;
     currentPeriodEnd: string | null;
+    cancelAtPeriodEnd: boolean;
+    cancelAt: string | null;
+    wallet: string | null;
+    subscriptionAddress: string | null;
+    pastDueSince: string | null;
+    nextRetryAt: string | null;
+    endedReason: string | null;
   }[];
   balances: {
     featureId: string;
@@ -291,5 +328,64 @@ export type Customer = {
     granted: string;
     breakdown: { grantId: string; source: string; amount: string; remaining: string; expiresAt: string | null }[];
   }[];
-  invoices: unknown[];
+  invoices: Invoice[];
 };
+
+export type Invoice = {
+  id: string;
+  subscriptionId: string;
+  kind: "activation" | "renewal" | "overage";
+  status: "open" | "paid" | "void" | "uncollectible";
+  periodStart: string;
+  total: string;
+  amountPaid: string;
+  createdAt: string;
+  paidAt: string | null;
+  lines: { kind: "base" | "overage" | "writeoff"; featureId: string | null; quantity: string | null; amount: string }[];
+  payments: { signature: string; amount: string; status: string; createdAt: string }[];
+};
+
+export type VerifyReport = {
+  env: "test" | "live";
+  network: string;
+  checkedAt: string;
+  plans: number;
+  subscriptions: number;
+  ok: boolean;
+  differences: { severity: "drift" | "notice"; kind: string; subject: string; message: string }[];
+};
+
+export type PlanList = {
+  settlement: { network: string; mint: string; puller: string } | null;
+  versions: {
+    planId: string;
+    version: number;
+    name: string;
+    status: string;
+    paid: boolean;
+    base: string;
+    onchainTerms: { amount: string; periodHours: number; ceiling: string; period: string; planId: string; metadataUri: string } | null;
+    published: { address: string; owner: string | null; publishedAt: string | null } | null;
+  }[];
+};
+
+export type WebhookEndpoint = { id: string; url: string; secret: string; createdAt?: string };
+
+/**
+ * Check a webhook's X-Nummo-Signature header ("t=<unix>,v1=<hex>") against the
+ * raw request body. Rejects signatures older than `toleranceSec`.
+ */
+export async function verifyWebhook(rawBody: string, header: string | null, secret: string, toleranceSec = 300): Promise<boolean> {
+  if (!header) return false;
+  const parts = Object.fromEntries(header.split(",").map((kv) => kv.split("=", 2) as [string, string]));
+  const t = Number(parts.t);
+  if (!Number.isFinite(t) || !parts.v1) return false;
+  if (Math.abs(Date.now() / 1000 - t) > toleranceSec) return false;
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const mac = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${t}.${rawBody}`)));
+  const hex = [...mac].map((b) => b.toString(16).padStart(2, "0")).join("");
+  if (hex.length !== parts.v1.length) return false;
+  let diff = 0;
+  for (let i = 0; i < hex.length; i++) diff |= hex.charCodeAt(i) ^ parts.v1.charCodeAt(i);
+  return diff === 0;
+}
