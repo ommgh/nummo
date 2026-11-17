@@ -87,6 +87,40 @@ Done when:
 - The demo runs on mainnet with real USDC at small amounts.
 - The repository is public with a licence, a README and a recorded walkthrough.
 
+#### M3 results (2026-11-17)
+
+Built: plan changes with proration and scheduled downgrades (`packages/core/src/billing.ts`, `packages/db/src/billing.ts`), one-off and automatic top-ups, the customer portal (`packages/settlement/src/portal.ts`, `apps/api/src/portal-page.ts`), the merchant dashboard with browser-wallet plan publishing (`apps/api/src/dashboard.ts`), `preview`, `topUp`, `portal` and `customers.list` in the SDK and API, CLI commands (`login`, `init`, `wallet new`/`balance`, `customers list`, `preview`, `attach`, `portal`, `whoami`), a Dockerfile and compose services, mainnet settings, and the [guide](guide/README.md) with a quickstart.
+
+`e2e/devnet-m3.ts` passed every check on devnet in 57 seconds (2026-11-17):
+
+| Scenario | Result |
+| --- | --- |
+| Dashboard publishing | The merchant wallet signed `createPlan` built by the dashboard; the server sent it and registered `pro@1` after the on-chain checks. |
+| Upgrade | Five seconds into an hourly Pro period (2 USDC), one signature subscribed to Team (5 USDC), pulled 3.00481 USDC (5 less a 1.99519 credit) and cancelled Pro on-chain. Pro stopped granting at once; Team granted 500 credits. |
+| Old plan's overage | The 0.50 USDC of overage used on Pro before the change was pulled from Pro on the next settlement pass. |
+| Downgrade | Team to Pro was scheduled for the period end; attaching Team again cancelled it. |
+| One-off top-up | 3 USDC moved by plain transfer for 300 credits; the reference key is in the transaction's accounts; the customer held no SOL. |
+| Automatic top-up | Usage took Refill credits from 10 to 3 (threshold 5); the next pass pulled 1 USDC and granted 100. |
+| Portal | Cancel and resume, each signed by the customer's wallet and confirmed; the subscription went `canceling` and back to `active`. |
+| `nummo verify` | No drift after every step. The puller spent 0.0068 SOL in all (three new subscriber records, fees). |
+
+The dashboard, portal and top-up checkout were also checked in Chrome against that devnet data; the portal listed the installed Backpack wallet through the Wallet Standard. Tests: 142 (unit and db), including `packages/settlement/test/m3.db.test.ts` and the M3 HTTP routes in `apps/api/test`.
+
+Done-when status:
+
+| Criterion | Status |
+| --- | --- |
+| A stranger charges a devnet wallet in under 30 minutes | The [quickstart](guide/quickstart.md) is written and its CLI steps were run on a fresh database; the on-chain steps are the ones `e2e/devnet-m3.ts` exercises. Not yet tried by someone new. |
+| The demo runs on mainnet with real USDC at small amounts | Not done. The code is ready (live keys, mainnet USDC by default, priority fee, the checklist in [deploy.md](guide/deploy.md)); it needs a funded mainnet puller, a merchant wallet and a hosting decision. |
+| Public repository with a licence, a README and a recorded walkthrough | Licence and README done. Making the repository public and recording the walkthrough with a real wallet are still to do. |
+
+Differences from the plan, decided during the build:
+
+- **No Next.js app.** The portal and dashboard are server-rendered by the API like the M2 checkout, with no bundler.
+- **Upgrades cancel at period end on-chain.** `cancelSubscriptionNow` needs the merchant's key, so the old subscription is cancelled by the customer in the same transaction and winds down: no entitlements, overage still collected, never renewed.
+- **Downgrades to a paid plan are signed at the period end**, because a subscription's periods start when it is signed.
+- **No documentation site yet.** The guide is Markdown in `docs/guide`, readable on GitHub; a hosted site can come with the public repository.
+
 ### M4. Agents and design partners (about 2 weeks)
 
 Build:

@@ -43,7 +43,7 @@ async function push(nummo: Nummo, configPath: string, yes: boolean) {
   console.log("Applied.");
   const plans = await nummo.plans.list();
   const unpublished = plans.versions.filter((v) => v.paid && !v.published);
-  if (unpublished.length) console.log(`\n${unpublished.length} paid plan version(s) need an on-chain plan: run \`nummo plans publish --keypair <merchant wallet>\`.`);
+  if (unpublished.length) console.log(`\n${unpublished.length} paid plan version(s) need an on-chain plan: publish them from the dashboard (Plans, "Publish with wallet") or run \`nummo plans publish --keypair <merchant wallet>\`.`);
 }
 
 async function listPlans(nummo: Nummo) {

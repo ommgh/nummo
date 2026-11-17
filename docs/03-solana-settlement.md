@@ -153,20 +153,37 @@ Code: `packages/solana` (chain access) and `packages/settlement` (everything tha
 | Finality | `confirmed` counts as paid. Payments are re-checked until `finalized`; one whose transaction disappears is reverted and its invoice reopened. |
 | `verify` | Read-only. Compares each published plan (amount, period, mint, puller listed, end time) and each live subscription (record exists, authority valid, wallet, terms, cancellation, period anchor, and the amount we recorded for the chain's current period against `amountPulledInPeriod`). |
 
-Known gaps: rent sponsorship has no quota yet, so a plan with a zero base fee lets anyone with a checkout link make the puller pay rent for new records (the SDK README warns about this); and the checkout page has been driven in a browser with a test wallet but not yet by a real wallet extension. Some wallets add instructions to transactions they sign; the server refuses any change, so that needs checking per wallet.
+Known gaps: rent sponsorship has no quota yet, so a plan with a zero base fee lets anyone with a checkout link make the puller pay rent for new records (the SDK README warns about this); and the checkout page has been driven in a browser with a test wallet but not yet signed by a real wallet extension (M3's portal found Backpack through the Wallet Standard, but nothing was signed with it). Some wallets add instructions to transactions they sign; the server refuses any change, so that needs checking per wallet.
 
 ## One-off purchases
 
 A top-up bought by hand is a plain token transfer the customer signs, with no delegation. The checkout adds a unique reference key to the transfer instruction so the payment can be found and matched to the invoice, which is the convention Solana Pay uses. An MPP `charge` is an alternative for the same job and is worth trying in milestone M4.
 
+**Built in M3:** `transferChecked` from the customer's USDC account to the merchant's, with a random reference appended as a read-only account (the token program ignores extra accounts when the authority is not a multisig), and the puller as fee payer. On devnet the reference showed up in the confirmed transaction's account keys. Automatic top-ups do not use transfers: they are pulls on the subscription, inside the signed ceiling.
+
 ## Plan changes
 
 On Stripe, a server can upgrade a customer without their involvement. Here, any change that needs a different on-chain plan needs the customer's signature.
 
-- **Upgrade:** one transaction that subscribes to the new plan, pulls the prorated difference as the first charge, and cancels the old subscription. The merchant co-signs so the old one ends immediately.
-- **Downgrade:** takes effect at the period end. The customer signs the new subscription when prompted. If they do not, the old one is simply not renewed.
+- **Upgrade:** one transaction that subscribes to the new plan, pulls the prorated difference as the first charge, and cancels the old subscription. Ending the old one at once (`cancelSubscriptionNow`) needs the plan owner's signature, and the merchant's key never reaches the server, so the subscriber's `cancelSubscription` is used instead: the old record runs out at the end of its current period. We stop granting from it immediately, collect overage already used on it, and never renew it.
+- **Downgrade:** takes effect at the period end. A new subscription's periods start when it is signed, so it cannot be signed in advance to start later. At the period end the old one is not renewed; a free target starts at once, and a paid one becomes a checkout the customer signs when prompted (in the meantime they are on the default plan).
 - **Merchant-side cancellation:** the merchant cannot cancel the on-chain record alone. We stop pulling, end the entitlements, and the portal prompts the customer to revoke the leftover record.
 - **Refunds:** there is no pull-back. A refund is a transfer the merchant signs, which we prepare and record against the invoice.
+
+## How M3 implements this
+
+| Topic | What the code does |
+| --- | --- |
+| Proration | `prorate` in `packages/core`: credit = old base × unused time ÷ period length, rounded up in the customer's favour, and only if the current period's base fee was collected. Due now = new base − credit. An upgrade needs the new plan to cost at least as much per hour and the credit to fit in its base fee, so no credit is ever lost; anything else is a downgrade at the period end. The quote is recomputed when the wallet asks for the transaction, because the credit shrinks as time passes. |
+| The change transaction | The activation of doc 03 plus `cancelSubscription` on the old plan (130,000 compute units requested). It must be signed by the old subscription's wallet; the checkout refuses others. If the old one was already cancelled on-chain, the cancel is left out. |
+| Wind-down | The replaced subscription becomes `canceling` with `replaced_by` and `cancel_at` set to the on-chain end. It no longer appears in entitlements, its uninvoiced overage is invoiced at once, and the worker ends it at `cancel_at`. |
+| Blocked changes | `plan_change_blocked` while the old subscription is `past_due`, has a pull in flight, or its current base fee is unpaid (the minute after a boundary). |
+| Scheduled downgrade | `scheduled_plan_version_id` and `scheduled_at` on the subscription. The renewal for the period starting at `scheduled_at` is not written; at that time the worker ends the subscription (`downgraded`) and the scheduled plan starts. |
+| Automatic top-up | After usage, a balance below the threshold writes an open `topup` invoice on the subscription (one open at a time, at most `maxPerPeriod` a period). The worker pulls it; the grant is issued when the pull confirms. If the ceiling has less left than the refill, the invoice is voided rather than cut. |
+| Portal | Cancel and resume are `cancelSubscription` and `resumeSubscription` signed by the subscription's wallet, puller as fee payer, checked byte for byte like the checkout. The result is applied from the chain straight away rather than waiting for the reconciler. |
+| Dashboard publishing | `createPlan` (plus the merchant's token account) built with the merchant's browser wallet as fee payer; the server sends it once signed and runs the same on-chain checks as `nummo plans publish`. The puller only co-signs transactions where it is a required signer. |
+
+Results on devnet are in [05-roadmap-and-grant.md](05-roadmap-and-grant.md#m3-results-2026-11-17).
 
 ## Key custody
 

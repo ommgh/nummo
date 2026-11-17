@@ -34,7 +34,7 @@
 | Core library | Pure functions for pricing, deduction order, proration and invoice building. No I/O, so it is easy to test. |
 | Settlement worker | Finds amounts that are due and pulls them on-chain. Handles retries and the failed-payment state machine. |
 | Reconciler | Reads on-chain accounts and events and corrects our records. This is what replaces Stripe webhooks. |
-| Web app | Hosted checkout and customer portal (wallet connect), and the merchant dashboard. In M2 the checkout is one page served by the API; the rest arrives in M3. |
+| Web app | Hosted checkout and customer portal (wallet connect), and the merchant dashboard. Served by the API as server-rendered pages (`apps/api/src/*-page.ts`, `dashboard.ts`), not a separate app; see the stack table. |
 | SDK and CLI | TypeScript client for the API, and a CLI that applies the pricing config. |
 | Webhook dispatcher | Delivers signed events to the merchant from an outbox table. |
 
@@ -49,7 +49,7 @@
 | Jobs | Loops guarded by Postgres advisory locks (M2); pg-boss when a real queue is needed | Inside Postgres, so no Redis yet. |
 | Solana | `@solana/kit`, `@solana/subscriptions`, `@solana-program/token` | The packages the official guides use. |
 | Local chain | Surfpool, then devnet | The Subscriptions docs describe local Surfpool workflows with the program at its real address. |
-| Web | Next.js, Wallet Standard | Checkout, portal and dashboard in one app. |
+| Web | Server-rendered HTML from the API (Hono's escaping `html` helper), plain JS, Wallet Standard | Checkout, portal and dashboard. Planned as a Next.js app; built without one in M2 and M3 because the pages are few, and no bundler keeps "no build step" true for self-hosters. |
 | Tests | Vitest, fast-check | Property tests for the ledger rules. |
 
 Redis and ClickHouse are deliberately left out. Autumn uses both at scale. We add Redis only when `check` latency needs it, and a columnar store only when usage analytics need it.
@@ -60,7 +60,6 @@ Redis and ClickHouse are deliberately left out. Autumn uses both at scale. We ad
 apps/
   api/          HTTP API
   worker/       settlement worker, reconciler, webhook dispatcher
-  web/          checkout, customer portal, merchant dashboard
   demo/         example AI chat app that uses the SDK
 packages/
   core/         pricing, deduction, proration, invoice building (pure)
@@ -86,7 +85,8 @@ Every table carries `org_id` (the merchant) and `env` (`test` for devnet, `live`
 | `credit_rates` | `credit_feature_id`, `metered_feature_id`, `credits_per_unit`, `billing_units` |
 | `plans` | `id`, `name`, `is_addon` |
 | `plan_versions` | `plan_id`, `version`, `base_amount`, `period_hours`, `ceiling_amount`, `mint`, `onchain_plan_pda`, `status` (draft, active, sunset) |
-| `plan_items` | `plan_version_id`, `feature_id`, `included`, `reset` (period, never), `overage_price`, `overage_billing_units`, `overage_cap` |
+| `plan_items` | `plan_version_id`, `feature_id`, `included`, `reset` (period, never), `overage_price`, `overage_billing_units`, `overage_cap`, `auto_topup_below`, `auto_topup_quantity`, `auto_topup_price`, `auto_topup_max_per_period` |
+| `env_settings` | `pay_to`, `top_ups` (one-off top-up prices from the config) |
 
 **Customers and subscriptions**
 
@@ -94,7 +94,7 @@ Every table carries `org_id` (the merchant) and `env` (`test` for devnet, `live`
 | --- | --- |
 | `customers` | `id` (the merchant's own user id), `name`, `email` |
 | `customer_wallets` | `customer_id`, `address`, `verified_at` |
-| `subscriptions` | `customer_id`, `plan_version_id`, `wallet`, `subscription_pda`, `status`, `period_anchor` (periods are anchor + k × period), `cancel_at`, `past_due_since`, `retry_count`, `next_retry_at`, `overage_blocked_until`, `ended_reason` |
+| `subscriptions` | `customer_id`, `plan_version_id`, `wallet`, `subscription_pda`, `status`, `period_anchor` (periods are anchor + k × period), `cancel_at`, `past_due_since`, `retry_count`, `next_retry_at`, `overage_blocked_until`, `replaced_by`, `scheduled_plan_version_id`, `scheduled_at`, `ended_reason` |
 
 **Ledger**
 
@@ -111,10 +111,11 @@ Every table carries `org_id` (the merchant) and `env` (`test` for devnet, `live`
 | Table | Key columns |
 | --- | --- |
 | `invoices` | `customer_id`, `subscription_id`, `period_start`, `total`, `status` (open, paid, failed, void) |
-| `invoice_lines` | `invoice_id`, `kind` (base, overage, topup, proration), `feature_id`, `quantity`, `amount` |
+| `invoice_lines` | `invoice_id`, `kind` (base, overage, writeoff, proration, topup), `feature_id`, `quantity`, `amount` |
 | `payments` | `invoice_id`, `signature`, `amount`, `status` (confirmed, finalized, reverted) |
 | `settlement_attempts` | `invoice_id` or `checkout_session_id`, `attempt`, `signature`, `last_valid_block_height`, `status` (pending, confirmed, failed, expired), `error_kind`, `onchain_period_start` |
-| `checkout_sessions` | `customer_id`, `plan_version_id`, `subscription_id`, `status` (open, submitted, completed, expired), `wallet`, `message`, `signature` |
+| `checkout_sessions` | `customer_id`, `kind` (subscribe, change, topup), `plan_version_id`, `subscription_id`, `replaces_subscription_id`, `proration`, `feature_id`, `quantity`, `pay_to`, `reference`, `status` (open, submitted, completed, expired), `wallet`, `message`, `signature` |
+| `portal_sessions` | `customer_id`, `return_url`, `pending` (the cancel or resume the wallet is asked to sign), `expires_at` |
 | `webhook_endpoints` | `url`, `secret` |
 | `outbox` | `event_type`, `payload`, `delivered_at`, `attempts`, `next_attempt_at`, `dead_at` |
 
@@ -170,7 +171,7 @@ Target for the first version: under 50 ms at the median for one region. If a mer
 
 Events are written to the outbox in the same transaction as the change they describe, then delivered with an HMAC signature and retried with backoff.
 
-`subscription.activated`, `subscription.renewed`, `subscription.past_due`, `subscription.canceled`, `subscription.ended`, `payment.succeeded`, `payment.failed`, `balance.low`, `balance.depleted`, `invoice.finalized`.
+`subscription.activated`, `subscription.renewed`, `subscription.past_due`, `subscription.canceled`, `subscription.resumed`, `subscription.change_scheduled`, `subscription.ended`, `payment.succeeded`, `payment.failed`, `balance.low`, `balance.depleted`, `invoice.finalized`.
 
 ## Security basics
 

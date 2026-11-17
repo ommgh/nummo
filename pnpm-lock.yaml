@@ -127,12 +127,18 @@ importers:
       '@hono/node-server':
         specifier: ^2.1.9
         version: 2.1.9(hono@4.13.19)
+      '@usenummo/config':
+        specifier: workspace:*
+        version: link:../../packages/config
       '@usenummo/db':
         specifier: workspace:*
         version: link:../../packages/db
       '@usenummo/settlement':
         specifier: workspace:*
         version: link:../../packages/settlement
+      '@usenummo/solana':
+        specifier: workspace:*
+        version: link:../../packages/solana
       hono:
         specifier: ^4.13.19
         version: 4.13.19
@@ -140,15 +146,9 @@ importers:
         specifier: ^4.6.7
         version: 4.6.7
     devDependencies:
-      '@usenummo/config':
-        specifier: workspace:*
-        version: link:../../packages/config
       '@usenummo/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
-      '@usenummo/solana':
-        specifier: workspace:*
-        version: link:../../packages/solana
 
   apps/demo:
     dependencies:

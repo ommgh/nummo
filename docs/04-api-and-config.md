@@ -57,27 +57,34 @@ export default defineConfig({
 
 From this config we derive the on-chain plan for `pro` version 1: amount 70 USDC (20 base plus 50 cap), period 720 hours.
 
+Since M3 the config can also carry one-off top-up prices (`topUps`), the wallet that receives them (`payTo`), and an automatic top-up per plan item (`autoTopUp`), whose most per period is added to the ceiling. Every option is in the [pricing config guide](guide/pricing-config.md).
+
 Rules:
 
 - `period` is a number of days or hours. There are no calendar months on-chain.
-- Changing `price`, `period`, or an overage cap requires a new `version`, because the on-chain plan cannot change. Changing included amounts or feature lists within the same ceiling does not.
+- Changing `price`, `period`, an overage cap or an automatic top-up requires a new `version`, because the on-chain plan cannot change. Changing included amounts or feature lists within the same ceiling does not.
 - A plan with no `price` and no overage needs nothing on-chain.
 
 ## CLI
 
 | Command | What it does |
 | --- | --- |
-| `nummo login` | Stores an API key for the test or live environment. Not built yet; the CLI reads `NUMMO_SECRET_KEY`. |
+| `nummo login --key <key> [--api <url>]` | Stores a secret key (mode 0600, in the user's config directory). `NUMMO_SECRET_KEY` and `NUMMO_API_URL` still win. `nummo logout`, `nummo whoami`. |
+| `nummo init` | Writes a starter `nummo.config.ts`. |
+| `nummo wallet new <file>` / `wallet balance <file or address>` | Creates a keypair file in the Solana CLI format; shows SOL and USDC on devnet or mainnet. |
 | `nummo push` | Shows a diff between the file and what is deployed, then applies it on confirmation. |
 | `nummo push --yes` | Applies without asking. For CI. |
 | `nummo plans` | Lists plan versions with their on-chain ceiling and whether they are published. |
 | `nummo plans publish --keypair <file>` | Creates the on-chain plan for any new paid plan version, signed by the merchant wallet, and registers it. The server checks the plan on-chain (ceiling, period, mint, puller, destination) before accepting it. |
-| `nummo customers get <id>` | Prints a customer's plans, balances and invoices. |
+| `nummo customers list [--search]`, `customers get <id>` | Lists customers with their plans; prints one customer's plans, balances and invoices. |
+| `nummo preview <customer> <plan>`, `attach <customer> <plan>` | What a plan change costs now; attach it (printing the checkout link for a paid plan). |
+| `nummo portal <customer>` | A customer portal link. |
+| `nummo dashboard` | The dashboard's address. |
 | `nummo verify` | Compares our records with the chain and lists differences. Exits 1 on drift. |
 
 In the repository the CLI is `pnpm nummo <command>` (package `packages/cli`); it will be published as the unscoped `nummo` package.
 
-Publishing a plan on-chain needs the merchant's wallet, so it is a separate step from `push`. The dashboard offers the same step with a browser wallet.
+Publishing a plan on-chain needs the merchant's wallet, so it is a separate step from `push`. The dashboard offers the same step with a browser wallet ("Publish with wallet" on the Plans page): the server builds the transaction with the merchant as fee payer, the wallet signs, and the server sends it and checks the plan on-chain before registering it.
 
 ## SDK
 
@@ -101,10 +108,14 @@ if (result.checkoutUrl) redirect(result.checkoutUrl);
 
 - Free plan: attached at once, no URL returned.
 - Paid plan: returns `status: "pending"` and a checkout URL where the customer connects a wallet and signs once. The plan version must be published on-chain first (`plan_not_published` otherwise). Calling `attach` again while the checkout is open returns the same URL.
-- Customer already on a paid plan: returns a checkout URL for the upgrade or downgrade (milestone M3; until then `not_implemented`).
+- Customer already on a paid plan (M3):
+  - **Upgrade** (the new plan costs at least as much per hour, and the credit fits in its base fee): `status: "pending"` with a checkout URL and `proration: { credit, dueNow }`. The wallet paying for the current plan signs once: subscribe to the new plan, pull `dueNow` (the new base fee less the unused part of the current period's), and cancel the old subscription. The old one stops granting at once, collects overage already used, and ends with its on-chain period.
+  - **Downgrade** (cheaper, or a free plan): `status: "scheduled"` with `effectiveAt`, the end of the current period. A free plan starts then; a paid one becomes a checkout for the customer to sign, listed in `pendingCheckouts` and the portal.
+  - Attaching the current plan again cancels a scheduled downgrade.
+  - `plan_change_blocked` while a payment on the current plan is failing or in flight.
 - Test environment only: `skipPayment: true` activates a paid plan without a wallet, for tests and demos.
 
-`nummo.preview({ customerId, planId })` returns what would be charged today and the new ceiling, without changing anything.
+`nummo.preview({ customerId, planId })` returns what would happen and be charged today, without changing anything: `change` (`new`, `upgrade`, `downgrade`, `none`, `blocked`), `dueNow`, `credit`, `effectiveAt`, the target plan with its ceiling, and whether the customer must sign.
 
 ### check: may this customer do this
 
@@ -162,10 +173,10 @@ await nummo.balances.finalize({
 
 ```ts
 const customer = await nummo.customers.get("user_123");
-// customer.subscriptions, customer.balances, customer.invoices
+// customer.subscriptions, customer.balances, customer.invoices, customer.pendingCheckouts
 ```
 
-This is what a merchant uses to render their own billing page. Each balance includes a `breakdown` array with one entry per grant, so the page can show plan credits and top-up credits separately.
+This is what a merchant uses to render their own billing page. Each balance includes a `breakdown` array with one entry per grant, so the page can show plan credits and top-up credits separately. Each subscription carries `replacedBy` (set after an upgrade replaced it) and `scheduledChange`. `nummo.customers.list({ search })` pages through customers.
 
 ### Top-ups
 
@@ -177,7 +188,9 @@ const { checkoutUrl } = await nummo.topUp({
 });
 ```
 
-Automatic top-up is part of a plan's config (threshold, refill amount, and a per-period maximum that becomes part of the ceiling), so it needs no extra signature after activation.
+`amount` is in base units and must sit between the top-up's `min` and `max`; the response says how many units it buys. The checkout asks the customer's wallet to sign a plain USDC transfer to the merchant (fee paid by the puller), carrying a random reference key as the Solana Pay convention does. The balance is granted when the transfer confirms and never expires.
+
+Automatic top-up is part of a plan's config (threshold, refill amount, and a per-period maximum that becomes part of the ceiling), so it needs no extra signature after activation. When usage takes the balance below the threshold, a `topup` invoice is written on the subscription; the worker pulls it like any other, and the credits are granted once the pull confirms. A refill is never cut by the ceiling: it is dropped instead.
 
 ### Customer portal
 
@@ -185,7 +198,7 @@ Automatic top-up is part of a plan's config (threshold, refill amount, and a per
 const { url } = await nummo.portal({ customerId: "user_123" });
 ```
 
-The portal shows the plan, the on-chain ceiling, usage this period, receipts with links to each transaction, and a cancel button that asks the wallet to sign `cancelSubscription`.
+The portal shows the plan, the on-chain ceiling, usage this period, receipts with links to each transaction, plan changes (with a preview of what each costs), top-ups, and cancel and resume buttons that ask the wallet to sign `cancelSubscription` or `resumeSubscription`. The link lasts an hour; create one each time a signed-in customer opens billing.
 
 ## REST endpoints
 
@@ -194,14 +207,15 @@ All endpoints take a bearer API key. Bodies are JSON. Amounts are strings of bas
 | Method and path | Purpose |
 | --- | --- |
 | `POST /v1/attach` | Attach a plan, or get a checkout URL |
-| `POST /v1/preview` | Preview a plan change |
+| `POST /v1/preview` | Preview a plan change `{ customerId, planId, version? }` |
 | `POST /v1/check` | Check access, optionally lock or deduct |
 | `POST /v1/track` | Record usage |
 | `POST /v1/track/batch` | Record up to 1,000 usage events |
 | `POST /v1/balances/finalize` | Confirm or release a lock |
 | `POST /v1/balances` | Grant a balance by hand |
-| `POST /v1/topups` | Start a one-off purchase |
-| `POST /v1/portal` | Create a portal session |
+| `POST /v1/topups` | Start a one-off purchase `{ customerId, featureId, amount, successUrl? }`; returns a checkout URL |
+| `POST /v1/portal` | Create a portal session `{ customerId, returnUrl? }`; returns `{ url, expiresAt }` |
+| `GET /v1/customers` | Customers with their live plans; `search`, `limit`, `offset` |
 | `GET /v1/customers/:id` | Customer with subscriptions, balances and recent invoices |
 | `PUT /v1/customers/:id` | Create or update a customer |
 | `GET /v1/customers/:id/invoices` | Invoices with their lines and payments (transaction signatures) |
@@ -212,7 +226,11 @@ All endpoints take a bearer API key. Bodies are JSON. Amounts are strings of bas
 | `GET /v1/verify` | Differences between our records and the chain |
 | `GET`, `PUT`, `DELETE /v1/webhook` | The webhook endpoint, `{ "url" }`. `PUT` returns the signing secret. |
 
-The hosted checkout is public and keyed only by its long random session id, like a payment link: `GET /checkout/:id` (the page), `GET /checkout/:id/session`, `POST /checkout/:id/transaction { wallet }` (returns the unsigned transaction), and `POST /checkout/:id/submit { signedTransaction }`. `GET /p/:id` serves the on-chain plan's metadata.
+The hosted checkout is public and keyed only by its long random session id, like a payment link: `GET /checkout/:id` (the page), `GET /checkout/:id/session`, `POST /checkout/:id/transaction { wallet }` (returns the unsigned transaction), and `POST /checkout/:id/submit { signedTransaction }`. `GET /p/:id` serves the on-chain plan's metadata. The same routes serve plan changes and top-ups; the session's `kind` (`subscribe`, `change`, `topup`) says which.
+
+The customer portal is public in the same way: `GET /portal/:id` (the page), `GET /portal/:id/data`, `POST /portal/:id/transaction { action: "cancel" | "resume", subscriptionId, wallet }`, `POST /portal/:id/submit { signedTransaction }`, `POST /portal/:id/change { planId, confirm }` and `POST /portal/:id/topup { featureId, amount }`.
+
+The merchant dashboard is at `/dashboard`. Sign-in takes a secret key and sets an HttpOnly, SameSite=Strict cookie holding a random session token, never the key.
 
 Settlement endpoints answer `503 settlement_unavailable` when the server has no puller key for the environment (`NUMMO_TEST_PULLER_KEY`, `NUMMO_LIVE_PULLER_KEY`).
 
@@ -227,14 +245,15 @@ Delivered as `POST` with a JSON body `{ id, type, env, createdAt, data }` and an
 | `subscription.activated` | First charge confirmed |
 | `subscription.renewed` | A period's base fee was collected |
 | `subscription.past_due` | A pull failed and retries have started |
-| `subscription.canceled` | The customer signed a cancellation; includes the end time |
+| `subscription.canceled` | The customer signed a cancellation; includes the end time. `reason: "replaced"` when an upgrade replaced it |
 | `subscription.resumed` | The customer resumed a cancelled subscription before it ended |
-| `subscription.ended` | Entitlements removed |
-| `payment.succeeded` | Any pull or purchase confirmed; includes the transaction signature |
+| `subscription.change_scheduled` | A downgrade was scheduled for the period end (`planId`, `effectiveAt`), or cancelled (`canceled: true`) |
+| `subscription.ended` | Entitlements removed. `next` describes a scheduled plan that took over (a pending checkout if it is paid) |
+| `payment.succeeded` | Any pull or purchase confirmed; includes the transaction signature; `kind: "topup"` for a one-off purchase |
 | `payment.failed` | A pull failed; includes the reason |
 | `balance.low` | A balance crossed the configured warning threshold |
 | `balance.depleted` | A balance reached zero |
-| `invoice.finalized` | A period's invoice is complete |
+| `invoice.finalized` | An invoice was written: `kind` is `activation`, `renewal`, `overage` or `topup` (`automatic: true` for a refill) |
 
 A merchant who uses `check` on every request does not need webhooks to gate access. They are for notifications and for copying state into the merchant's own database.
 
@@ -245,6 +264,7 @@ The example in `apps/demo` is an AI chat app with the config above:
 1. A new user chats on the free plan until 100 credits run out.
 2. They upgrade to Pro: connect a wallet, sign once, and the first 20 USDC moves.
 3. Premium messages draw 10 credits each. Past 1,000 credits, overage accrues and is collected every 5 USDC.
-4. The portal shows the 70 USDC ceiling, usage, and receipts.
-5. They empty the wallet. The next pull fails, the account goes past due, and after the grace period it falls back to free.
-6. Later milestone: a script acting as an agent pays the same API per request over x402 and appears in the same dashboard.
+4. "Billing" opens the portal: the 70 USDC ceiling, usage, receipts, a prorated upgrade to Team, and cancel with the wallet.
+5. "Buy 500 credits" is a one-off top-up of 5 USDC, signed once.
+6. They empty the wallet. The next pull fails, the account goes past due, and after the grace period it falls back to free.
+7. Later milestone (M4): a script acting as an agent pays the same API per request over x402 and appears in the same dashboard.

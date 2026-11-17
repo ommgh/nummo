@@ -1,6 +1,6 @@
 # nummo: usage-based billing on Solana stablecoin rails
 
-Name: `nummo` (decided 2026-11-17; the working name was `bill`). Last updated: 2026-11-17. Status: milestones M1 (ledger core) and M2 (settlement on devnet) built, see the repository [README](../README.md); spikes S1 and S2 passed on devnet.
+Name: `nummo` (decided 2026-11-17; the working name was `bill`). Last updated: 2026-11-17. Status: milestones M1 (ledger core) and M2 (settlement on devnet) built; M3 (product surface) built and passed on devnet, with its mainnet run, public repository and recorded walkthrough still to do. See the repository [README](../README.md). Spikes S1 and S2 passed on devnet. To use nummo, start with the [guide](guide/README.md).
 
 ## Summary
 
@@ -32,13 +32,16 @@ Licence: Apache-2.0 (decided 2026-11-17). Still open: who holds the key that sig
 5. [05-roadmap-and-grant.md](05-roadmap-and-grant.md): spikes, milestones, testing, grant strategy, risks, and open questions.
 6. [sources.md](sources.md): every source the plan relies on, with what each one supports.
 
+The [guide](guide/README.md) is for people using nummo: quickstart, pricing config, billing flows, self-hosting and mainnet.
+
 ## Start here next session
 
-1. Record the grant demo: the hosted checkout with a real wallet extension (Phantom, Solflare or Backpack on devnet, holding devnet USDC). The page has been driven in Chrome on devnet with a test wallet registered through the Wallet Standard, but not yet signed by a real extension, which might alter the transaction (the server would then refuse it).
-2. Start milestone M3: merchant dashboard, customer portal (cancel from the portal), top-ups, plan changes with proration.
-3. Finish spike S3 (decode program events) when moving the reconciler from polling to events.
+1. Finish M3's done-when items, each of which needs the owner's decision or hands: make the repository public; run the demo on mainnet with real USDC at small amounts (a funded mainnet puller, a merchant wallet, and where to host it, following [guide/deploy.md](guide/deploy.md)); record the walkthrough with a real wallet extension (Phantom, Solflare or Backpack on devnet).
+2. Ask someone new to follow the [quickstart](guide/quickstart.md) and time it.
+3. Start M4: x402 and MPP middleware feeding the ledger, per-model token pricing.
+4. Finish spike S3 (decode program events) when moving the reconciler from polling to events.
 
-Done on 2026-11-17: S1 answered from the program source and its tests (D3 holds); monorepo scaffolded; M1 built (core rules with property tests, config, Postgres hot path, API, SDK with fail-open, demo); M2 built and its devnet scenarios passed (see the M2 results in [05-roadmap-and-grant.md](05-roadmap-and-grant.md#m2-results-2026-11-17)).
+Done on 2026-11-17: S1 answered from the program source and its tests (D3 holds); monorepo scaffolded; M1 built; M2 built and its devnet scenarios passed; M3 built (plan changes with proration, scheduled downgrades, one-off and automatic top-ups, customer portal, merchant dashboard, CLI and SDK additions, Docker, mainnet settings, the guide) and its devnet scenarios passed (see the M3 results in [05-roadmap-and-grant.md](05-roadmap-and-grant.md#m3-results-2026-11-17)).
 
 ## Vocabulary
 

@@ -1,5 +1,8 @@
-# Local Postgres for development and the db test suite.
+# Local Postgres for development and the db test suite (`pnpm db:up`).
 # Port 5434 so it does not collide with other local Postgres instances.
+#
+# The API and worker as containers too: `docker compose --profile app up --build`.
+# They read .env; put the puller keypair at ./keys/puller.json (mounted read-only).
 name: nummo
 
 services:
@@ -19,5 +22,34 @@ services:
       interval: 2s
       timeout: 3s
       retries: 20
+  api:
+    profiles: [app]
+    build: .
+    env_file: [{ path: .env, required: false }]
+    environment:
+      DATABASE_URL: postgres://nummo:nummo@postgres:5432/nummo
+      NUMMO_TEST_PULLER_KEY: ${NUMMO_TEST_PULLER_KEY:-/keys/puller.json}
+    volumes:
+      - ./keys:/keys:ro
+    ports:
+      - "8787:8787"
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  worker:
+    profiles: [app]
+    build: .
+    command: ["node", "apps/worker/src/main.ts"]
+    env_file: [{ path: .env, required: false }]
+    environment:
+      DATABASE_URL: postgres://nummo:nummo@postgres:5432/nummo
+      NUMMO_TEST_PULLER_KEY: ${NUMMO_TEST_PULLER_KEY:-/keys/puller.json}
+      # The API applies migrations on start; the worker waits for it.
+      MIGRATE_ON_START: "0"
+    volumes:
+      - ./keys:/keys:ro
+    depends_on:
+      api: { condition: service_started }
+
 volumes:
   nummo_pg:
