@@ -88,7 +88,7 @@ async function subscribe(customerId: string, balance: bigint) {
   const wallet = chain.wallet(balance);
   const { transaction } = await prepareCheckoutTransaction(db, chains(), sessionId, wallet, chain.now());
   const done = await submitCheckout(db, chains(), settings, sessionId, chain.walletSign(transaction, wallet));
-  return { sessionId, wallet, done, subscriptionId: a.subscriptionId };
+  return { sessionId, wallet, done, subscriptionId: a.subscriptionId! };
 }
 
 async function sub(id: string) {
@@ -159,7 +159,7 @@ describe("checkout", () => {
     chain.landPending();
     await resolveSubmittedCheckouts(db, chains(), chain.now());
     expect((await getCheckout(db, chains(), id, chain.now())).status).toBe("completed");
-    expect((await sub(a.subscriptionId)).status).toBe("active");
+    expect((await sub(a.subscriptionId!)).status).toBe("active");
   });
 
   test("an unpublished paid plan cannot be attached", async () => {

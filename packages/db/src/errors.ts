@@ -14,6 +14,10 @@ export type ErrorCode =
   | "checkout_closed"
   | "wallet_not_ready"
   | "activation_rejected"
+  | "plan_change_blocked"
+  | "topup_not_available"
+  | "portal_not_found"
+  | "wrong_wallet"
   | "settlement_unavailable"
   | "not_found"
   | "invalid_config"
@@ -37,6 +41,10 @@ const STATUS: Record<ErrorCode, number> = {
   checkout_closed: 409,
   wallet_not_ready: 400,
   activation_rejected: 400,
+  plan_change_blocked: 409,
+  topup_not_available: 400,
+  portal_not_found: 404,
+  wrong_wallet: 400,
   settlement_unavailable: 503,
   not_found: 404,
   invalid_config: 400,

@@ -4,7 +4,9 @@
  * The model is faked; the billing is real. Every message is gated with
  * `check({ sendEvent: true })`, so it is allowed and charged in one call.
  * "Upgrade" sends the user to nummo's hosted checkout, where a Solana wallet
- * signs once. Set DEMO_SKIP_PAYMENT=1 to upgrade without a wallet (test only).
+ * signs once. "Buy credits" is a one-off top-up, "Billing" opens the hosted
+ * customer portal (plan changes, receipts, cancel). Set DEMO_SKIP_PAYMENT=1 to
+ * upgrade without a wallet (test only).
  */
 
 import { serve } from "@hono/node-server";
@@ -47,6 +49,23 @@ app.post("/api/upgrade", async (c) => {
   }
 });
 
+app.post("/api/topup", async (c) => {
+  const { userId } = await c.req.json<{ userId: string }>();
+  try {
+    const successUrl = new URL("/?topped=1", c.req.url).toString();
+    return c.json(await nummo.topUp({ customerId: userId, featureId: "credits", amount: 5_000_000n, successUrl }));
+  } catch (e) {
+    if (e instanceof NummoApiError) return c.json({ error: e.message }, 400);
+    throw e;
+  }
+});
+
+app.post("/api/billing", async (c) => {
+  const { userId } = await c.req.json<{ userId: string }>();
+  // In a real app: only for the signed-in user, and a fresh link each time.
+  return c.json(await nummo.portal({ customerId: userId, returnUrl: new URL("/", c.req.url).toString() }));
+});
+
 const port = Number(process.env.DEMO_PORT ?? 3000);
 serve({ fetch: app.fetch, port }, () => console.log(`demo chat on http://localhost:${port}`));
 
@@ -75,6 +94,8 @@ const PAGE = /* html */ `<!doctype html>
     <label><input type="checkbox" id="premium"> premium</label>
     <button>Send</button>
     <button type="button" class="ghost" id="up">Upgrade to Pro</button>
+    <button type="button" class="ghost" id="buy">Buy 500 credits (5 USDC)</button>
+    <button type="button" class="ghost" id="billing">Billing</button>
   </form>
 </main>
 <script>
@@ -107,6 +128,13 @@ const PAGE = /* html */ `<!doctype html>
     j.error ? add("bad", j.error) : add("", "Upgraded to Pro.");
     refresh();
   };
+  const go = async (path) => {
+    const j = await (await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ userId }) })).json();
+    if (j.checkoutUrl || j.url) location.assign(j.checkoutUrl || j.url); else add("bad", j.error || "Something went wrong.");
+  };
+  document.getElementById("buy").onclick = () => go("/api/topup");
+  document.getElementById("billing").onclick = () => go("/api/billing");
+  if (new URLSearchParams(location.search).has("topped")) add("", "500 credits added. Purchased credits do not expire.");
   if (new URLSearchParams(location.search).has("upgraded")) add("", "Welcome to Pro. Your wallet signed once; renewals are collected automatically.");
   refresh();
 </script></body></html>`;

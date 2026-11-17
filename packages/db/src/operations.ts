@@ -28,6 +28,7 @@ import { NummoError } from "./errors.ts";
 import { newId } from "./ids.ts";
 import { accruals, grants, ledgerEntries, locks, outbox, usageEvents } from "./schema.ts";
 import { type CustomerCtx, inCustomerTx, refresh, releaseLock } from "./snapshot.ts";
+import { maybeAutoTopUp } from "./billing.ts";
 
 // ------------------------------------------------------------------ types
 
@@ -279,6 +280,7 @@ async function trackInCtx(ctx: CustomerCtx, input: Omit<TrackInput, "customerId"
 
   await refresh(ctx);
   await emitThresholds(ctx, before, view(ctx, f.id));
+  if (ctx.autoTopUps.length) await maybeAutoTopUp(ctx);
   return result;
 }
 
@@ -374,6 +376,7 @@ export function check(db: Db, scope: Scope, input: CheckInput): Promise<CheckRes
       result.balances = balancesOf(after, ctx.now);
       result.overage = overageView(after);
       result.lock = { lockId: input.lock.lockId, expiresAt: input.lock.expiresAt.toISOString() };
+      if (ctx.autoTopUps.length) await maybeAutoTopUp(ctx);
     }
     return result;
   });

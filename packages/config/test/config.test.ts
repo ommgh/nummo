@@ -42,6 +42,7 @@ describe("pricing config", () => {
       included: "1000",
       reset: "period",
       overage: { price: "10000", per: "1", cap: "50000000" },
+      autoTopUp: null,
     });
     expect(doc.plans[0]!.items[0]!.reset).toBe(720);
     // Round-trips through JSON (what the CLI sends).
@@ -75,7 +76,52 @@ describe("pricing config", () => {
     ["calendar month", { features: [sso], plans: [{ ...pro, price: { amount: 1n, period: "1m" as never }, items: [] }] }, "period"],
     ["bad id", { features: [{ id: "Premium Message", type: "boolean" as const }], plans: [] }, "lowercase"],
     ["zero overage cap", { features: [credits, basicMessage, premiumMessage], plans: [{ ...pro, items: [{ feature: "credits", included: 1, reset: "period" as const, overage: { price: 1n, cap: 0n } }] }] }, "greater than 0"],
+    ["auto top-up on a free plan", { features: [credits, basicMessage, premiumMessage], plans: [{ ...free, items: [{ feature: "credits", included: 5, reset: "30d" as const, autoTopUp: { below: 1, quantity: 10, price: 1n, maxPerPeriod: 1 } }] }] }, "needs a paid plan"],
+    ["auto top-up on a metered feature inside a credit system", { features: [credits, basicMessage, premiumMessage], plans: [{ ...pro, items: [{ feature: "basic_message", included: 5, reset: "period" as const, autoTopUp: { below: 1, quantity: 10, price: 1n, maxPerPeriod: 1 } }] }] }, "put the automatic top-up on that"],
+    ["top-up of a boolean", { features: [sso], plans: [], topUps: [{ feature: "sso", price: 1n }] }, "no balance"],
+    ["top-up of an unknown feature", { features: [], plans: [], topUps: [{ feature: "credits", price: 1n }] }, "unknown feature"],
+    ["top-up with min above max", { features: [credits, basicMessage, premiumMessage], plans: [], topUps: [{ feature: "credits", price: 1n, min: 10n, max: 5n }] }, "min <= max"],
+    ["payTo that is not an address", { features: [], plans: [], payTo: "not-a-wallet" }, "base58"],
   ])("rejects %s", (_name, cfg, message) => {
     expect(invalid(cfg)).toContain(message);
+  });
+
+  test("automatic top-ups add their most per period to the on-chain ceiling", () => {
+    const doc = toDocument({
+      ...example,
+      plans: [
+        free,
+        {
+          ...pro,
+          items: [
+            { feature: "sso" },
+            {
+              feature: "credits",
+              included: 1000,
+              reset: "period",
+              overage: { price: usdc("0.01"), per: 1, cap: usdc("50") },
+              autoTopUp: { below: 100, quantity: 1000, price: usdc("10"), maxPerPeriod: 3 },
+            },
+          ],
+        },
+      ],
+    });
+    // 20 base + 50 overage cap + 3 x 10 top-ups
+    expect(onchainTerms(doc.plans[1]!)).toEqual({ amount: usdc("100"), periodHours: 720 });
+    expect(doc.plans[1]!.items[1]!.autoTopUp).toEqual({ below: "100", quantity: "1000", price: "10000000", maxPerPeriod: 3 });
+  });
+
+  test("one-off top-ups default to 1 per unit, between 1 and 1,000 USDC", () => {
+    const doc = toDocument({ ...example, payTo: "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin", topUps: [{ feature: "credits", price: usdc("1"), per: 100 }] });
+    expect(doc.topUps).toEqual([{ feature: "credits", price: "1000000", per: "100", min: "1000000", max: "1000000000" }]);
+    expect(doc.payTo).toBe("9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin");
+  });
+
+  test("documents written before top-ups existed still validate", () => {
+    const doc = JSON.parse(JSON.stringify(toDocument(example)));
+    delete doc.topUps;
+    delete doc.payTo;
+    for (const p of doc.plans) for (const i of p.items) delete i.autoTopUp;
+    expect(validateDocument(doc)).toEqual(toDocument(example));
   });
 });

@@ -33,8 +33,22 @@ export const pro = plan({
   ],
 });
 
+// Team: an upgrade from Pro is prorated and signed once; a move back is scheduled for the period end.
+export const team = plan({
+  id: "team",
+  version: 1,
+  name: "Team",
+  price: { amount: usdc("50"), period: "30d" },
+  items: [
+    { feature: sso.id },
+    { feature: credits.id, included: 5000, reset: "period", overage: { price: usdc("0.008"), per: 1, cap: usdc("100") } },
+  ],
+});
+
 export default defineConfig({
   mint: "USDC",
   features: [sso, basicMessage, premiumMessage, credits],
-  plans: [free, pro],
+  plans: [free, pro, team],
+  // One-off purchases from the demo's "Buy credits" button and the portal: 1 USDC buys 100 credits.
+  topUps: [{ feature: credits.id, price: usdc("1"), per: 100 }],
 });

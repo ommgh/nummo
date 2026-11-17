@@ -8,9 +8,9 @@ import { type Catalog, type FeatureDef, qty } from "@usenummo/core";
 import type { Db, DbOrTx, Scope } from "./client.ts";
 import { NummoError } from "./errors.ts";
 import { newId } from "./ids.ts";
-import { creditRates, features, planItems, plans, planVersions } from "./schema.ts";
+import { creditRates, envSettings, features, planItems, plans, planVersions } from "./schema.ts";
 
-export type ConfigChange = { kind: "feature" | "plan_version"; id: string; action: "create" | "update" | "unchanged" | "archive" };
+export type ConfigChange = { kind: "feature" | "plan_version" | "settings"; id: string; action: "create" | "update" | "unchanged" | "archive" };
 
 /**
  * The fields an on-chain plan freezes. Changing any of them needs a new version
@@ -23,6 +23,11 @@ function frozenTerms(p: PlanDoc) {
     overage: p.items
       .filter((i) => i.overage)
       .map((i) => [i.feature, i.overage])
+      .sort(),
+    // Absent from documents written before top-ups existed: compare those as "none".
+    autoTopUp: p.items
+      .filter((i) => i.autoTopUp)
+      .map((i) => [i.feature, i.autoTopUp])
       .sort(),
   });
 }
@@ -170,10 +175,25 @@ export async function applyConfig(db: Db, scope: Scope, raw: unknown, opts: { dr
               overagePrice: i.overage ? BigInt(i.overage.price) : null,
               overagePer: i.overage?.per ?? null,
               overageCap: i.overage ? BigInt(i.overage.cap) : null,
+              autoTopUpBelow: i.autoTopUp?.below ?? null,
+              autoTopUpQuantity: i.autoTopUp?.quantity ?? null,
+              autoTopUpPrice: i.autoTopUp ? BigInt(i.autoTopUp.price) : null,
+              autoTopUpMaxPerPeriod: i.autoTopUp?.maxPerPeriod ?? null,
             })),
           );
         }
       }
+
+      // Top-up prices and the wallet that receives one-off payments.
+      const [prevSettings] = await tx.select().from(envSettings).where(and(eq(envSettings.orgId, scope.orgId), eq(envSettings.env, scope.env)));
+      const sameSettings = prevSettings && prevSettings.payTo === doc.payTo && canonical(prevSettings.topUps) === canonical(doc.topUps);
+      if (prevSettings || doc.payTo !== null || doc.topUps.length > 0) {
+        changes.push({ kind: "settings", id: "topUps, payTo", action: !prevSettings ? "create" : sameSettings ? "unchanged" : "update" });
+      }
+      await tx
+        .insert(envSettings)
+        .values({ ...scope, payTo: doc.payTo, topUps: doc.topUps })
+        .onConflictDoUpdate({ target: [envSettings.orgId, envSettings.env], set: { payTo: doc.payTo, topUps: doc.topUps, updatedAt: new Date() } });
 
       if (opts.dryRun) throw DRY;
     });

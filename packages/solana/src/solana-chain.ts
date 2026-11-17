@@ -5,6 +5,8 @@
 
 import {
   type Address,
+  AccountRole,
+  getAddressDecoder,
   type Instruction,
   type KeyPairSigner,
   type Rpc,
@@ -36,7 +38,13 @@ import {
   verifySignature,
 } from "@solana/kit";
 import { getSetComputeUnitLimitInstruction, getSetComputeUnitPriceInstruction } from "@solana-program/compute-budget";
-import { findAssociatedTokenPda, TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
+import {
+  fetchMint,
+  findAssociatedTokenPda,
+  getCreateAssociatedTokenIdempotentInstructionAsync,
+  getTransferCheckedInstruction,
+  TOKEN_PROGRAM_ADDRESS,
+} from "@solana-program/token";
 import {
   PlanStatus,
   UNKNOWN_INIT_ID,
@@ -45,6 +53,9 @@ import {
   fetchMaybeSubscriptionAuthority,
   fetchMaybeSubscriptionDelegation,
   findPlanPda,
+  getCancelSubscriptionOverlayInstructionAsync,
+  getCreatePlanOverlayInstructionAsync,
+  getResumeSubscriptionOverlayInstructionAsync,
   findSubscriptionAuthorityPda,
   findSubscriptionDelegationPda,
   getInitSubscriptionAuthorityOverlayInstructionAsync,
@@ -56,6 +67,8 @@ import {
   ActivationRejected,
   type ActivationInput,
   type BuiltActivation,
+  type BuiltTx,
+  type TransferInput,
   type Chain,
   type Network,
   type OnchainAuthority,
@@ -82,7 +95,10 @@ export type SolanaChainOptions = {
  * priority fee small, since it is paid per unit requested.
  */
 const CU_ACTIVATION = 100_000;
+/** A plan change adds a cancel to the activation. */
+const CU_CHANGE = 130_000;
 const CU_PULL = 20_000;
+const CU_SMALL = 30_000;
 
 /** The public devnet RPC rate-limits with HTTP 429. Retry those with backoff; never retry anything else. */
 export async function withRateLimitRetry<T>(fn: () => Promise<T>, tries = 8): Promise<T> {
@@ -109,6 +125,7 @@ export class SolanaChain implements Chain {
   private readonly puller: KeyPairSigner;
   private readonly priorityFee: bigint;
   private tokenProgram: Address | null = null;
+  private decimals: number | null = null;
 
   constructor(opts: SolanaChainOptions) {
     this.network = opts.network;
@@ -131,6 +148,31 @@ export class SolanaChain implements Chain {
   private async ata(owner: string): Promise<Address> {
     const [a] = await findAssociatedTokenPda({ mint: address(this.mint), owner: address(owner), tokenProgram: await this.getTokenProgram() });
     return a;
+  }
+
+  private async mintDecimals(): Promise<number> {
+    if (this.decimals !== null) return this.decimals;
+    const m = await rl(() => fetchMint(this.rpc, address(this.mint), { commitment: "confirmed" }));
+    this.decimals = m.data.decimals;
+    return this.decimals;
+  }
+
+  /** Compile an unsigned transaction with the puller (or `feePayer`) as fee payer, for a wallet to sign. */
+  private async compileForWallet(ixs: Instruction[], feePayer?: string): Promise<BuiltTx> {
+    const { value: bh } = await rl(() => this.rpc.getLatestBlockhash({ commitment: "confirmed" }).send());
+    const message = pipe(
+      createTransactionMessage({ version: 0 }),
+      (m) => setTransactionMessageFeePayerSigner(feePayer ? createNoopSigner(address(feePayer)) : this.puller, m),
+      (m) => setTransactionMessageLifetimeUsingBlockhash(bh, m),
+      (m) => appendTransactionMessageInstructions(ixs, m),
+    );
+    const tx = compileTransaction(message);
+    assertIsTransactionWithinSizeLimit(tx);
+    return {
+      transaction: getBase64EncodedWireTransaction(tx),
+      message: b64.fromBytes(tx.messageBytes as unknown as Uint8Array),
+      lastValidBlockHeight: bh.lastValidBlockHeight,
+    };
   }
 
   private computeBudget(units: number): Instruction[] {
@@ -230,7 +272,7 @@ export class SolanaChain implements Chain {
     const tokenProgram = await this.getTokenProgram();
     const subscriber = createNoopSigner(address(input.subscriber));
     const authority = await this.getAuthority(input.subscriber);
-    const ixs: Instruction[] = this.computeBudget(CU_ACTIVATION);
+    const ixs: Instruction[] = this.computeBudget(input.cancel ? CU_CHANGE : CU_ACTIVATION);
 
     if (!authority) {
       ixs.push(
@@ -271,25 +313,81 @@ export class SolanaChain implements Chain {
         }),
       );
     }
-
-    const { value: bh } = await rl(() => this.rpc.getLatestBlockhash({ commitment: "confirmed" }).send());
-    const message = pipe(
-      createTransactionMessage({ version: 0 }),
-      (m) => setTransactionMessageFeePayerSigner(this.puller, m),
-      (m) => setTransactionMessageLifetimeUsingBlockhash(bh, m),
-      (m) => appendTransactionMessageInstructions(ixs, m),
-    );
-    const tx = compileTransaction(message);
-    assertIsTransactionWithinSizeLimit(tx);
-    return {
-      transaction: getBase64EncodedWireTransaction(tx),
-      message: b64.fromBytes(tx.messageBytes as unknown as Uint8Array),
-      lastValidBlockHeight: bh.lastValidBlockHeight,
-      createsAuthority: !authority,
-    };
+    if (input.cancel) {
+      ixs.push(await getCancelSubscriptionOverlayInstructionAsync({ subscriber, planPda: address(input.cancel.plan) }));
+    }
+    return { ...(await this.compileForWallet(ixs)), createsAuthority: !authority };
   }
 
-  async cosignActivation(signedTransaction: string, expectedMessage: string, subscriber: string, lastValidBlockHeight: bigint): Promise<PreparedTx> {
+  async buildCancel(input: { plan: string; subscriber: string }): Promise<BuiltTx> {
+    const ix = await getCancelSubscriptionOverlayInstructionAsync({
+      subscriber: createNoopSigner(address(input.subscriber)),
+      planPda: address(input.plan),
+    });
+    return this.compileForWallet([...this.computeBudget(CU_SMALL), ix]);
+  }
+
+  async buildResume(input: { plan: string; subscriber: string; expiresAt: Date }): Promise<BuiltTx> {
+    const ix = await getResumeSubscriptionOverlayInstructionAsync({
+      subscriber: createNoopSigner(address(input.subscriber)),
+      planPda: address(input.plan),
+      tokenMint: address(this.mint),
+      expectedExpiresAtTs: BigInt(Math.floor(input.expiresAt.getTime() / 1000)),
+    });
+    return this.compileForWallet([...this.computeBudget(CU_SMALL), ix]);
+  }
+
+  async buildTransfer(input: TransferInput): Promise<BuiltTx> {
+    const tokenProgram = await this.getTokenProgram();
+    const ix = getTransferCheckedInstruction(
+      {
+        source: await this.ata(input.from),
+        mint: address(this.mint),
+        destination: await this.ata(input.to),
+        authority: createNoopSigner(address(input.from)),
+        amount: input.amount,
+        decimals: await this.mintDecimals(),
+      },
+      { programAddress: tokenProgram },
+    );
+    // The reference rides along read-only; the token program ignores extra accounts
+    // when the authority is not a multisig (the Solana Pay convention).
+    const withReference: Instruction = {
+      ...ix,
+      accounts: [...(ix.accounts ?? []), { address: address(input.reference), role: AccountRole.READONLY }],
+    };
+    return this.compileForWallet([...this.computeBudget(CU_SMALL), withReference]);
+  }
+
+  async buildCreatePlan(input: { owner: string; planId: bigint; amount: bigint; periodHours: number; metadataUri: string }) {
+    const tokenProgram = await this.getTokenProgram();
+    const owner = createNoopSigner(address(input.owner));
+    const ixs: Instruction[] = [
+      ...this.computeBudget(60_000),
+      // The merchant's receiving token account must exist before the first pull (doc 03 gotcha).
+      await getCreateAssociatedTokenIdempotentInstructionAsync({ payer: owner, owner: owner.address, mint: address(this.mint), tokenProgram }),
+      await getCreatePlanOverlayInstructionAsync({
+        owner,
+        planId: input.planId,
+        mint: address(this.mint),
+        amount: input.amount,
+        periodHours: input.periodHours,
+        endTs: 0n,
+        destinations: [owner.address],
+        pullers: [this.puller.address],
+        metadataUri: input.metadataUri,
+        tokenProgram,
+      }),
+    ];
+    return { ...(await this.compileForWallet(ixs, input.owner)), planAddress: await this.findPlanAddress(input.owner, input.planId) };
+  }
+
+  newReference(): string {
+    // 32 random bytes are a valid address. Only the address is used; nobody ever signs with it.
+    return getAddressDecoder().decode(crypto.getRandomValues(new Uint8Array(32)));
+  }
+
+  async cosign(signedTransaction: string, expectedMessage: string, subscriber: string, lastValidBlockHeight: bigint): Promise<PreparedTx> {
     let tx: Transaction;
     try {
       tx = getTransactionDecoder().decode(b64.toBytes(signedTransaction));
@@ -305,7 +403,10 @@ export class SolanaChain implements Chain {
     const ok = await verifySignature(await getPublicKeyFromAddress(address(subscriber)), sig, tx.messageBytes);
     if (!ok) throw new ActivationRejected("the subscriber's signature is not valid");
 
-    const full = await partiallySignTransaction([this.puller.keyPair], tx as Parameters<typeof partiallySignTransaction>[1]);
+    // The puller co-signs only where it is a required signer (fee payer); a plan the merchant publishes needs nobody else.
+    const full = this.puller.address in tx.signatures
+      ? await partiallySignTransaction([this.puller.keyPair], tx as Parameters<typeof partiallySignTransaction>[1])
+      : tx;
     assertIsFullySignedTransaction(full);
     return {
       signature: getSignatureFromTransaction(full),

@@ -26,6 +26,7 @@ import {
   emit,
   endSubscription,
   type Env,
+  grantTopUp,
   inCustomerTx,
   newId,
   schema,
@@ -121,9 +122,14 @@ export async function settleSubscription(
   const [current] = await db.select().from(subscriptions).where(eq(subscriptions.id, sub.id));
   if (!current || current.status === "ended") return false;
 
-  // 2. Endings already known from the chain or the retry schedule.
+  // 2. Endings already known from the chain, a scheduled downgrade, or the retry schedule.
   if (current.cancelAt && now >= current.cancelAt) {
-    await withCustomer(db, current, (ctx) => endSubscription(ctx, current.id, "canceled"));
+    await withCustomer(db, current, (ctx) => endSubscription(ctx, current.id, current.replacedBy ? "replaced" : "canceled"));
+    return false;
+  }
+  if (current.scheduledAt && now >= current.scheduledAt) {
+    // Not renewed: the scheduled plan takes over (endSubscription starts it).
+    await withCustomer(db, current, (ctx) => endSubscription(ctx, current.id, "downgraded"));
     return false;
   }
   if (current.status === "past_due" && current.nextRetryAt === null && current.pastDueSince) {
@@ -260,7 +266,7 @@ export async function writeInvoices(db: Db, settings: SettlementSettings, sub: S
     // Renewal: the first pull after a boundary starts the new on-chain period.
     const newPeriod = cur.start.getTime() > s.periodAnchor.getTime();
     const pastMargin = ctx.now.getTime() >= cur.start.getTime() + settings.boundaryMarginMs;
-    const continuing = s.cancelAt === null || s.cancelAt > cur.start;
+    const continuing = (s.cancelAt === null || s.cancelAt > cur.start) && (s.scheduledAt === null || s.scheduledAt > cur.start);
     if (newPeriod && pastMargin && continuing) {
       const [exists] = await ctx.tx
         .select({ id: invoices.id })
@@ -319,7 +325,8 @@ export async function writeInvoices(db: Db, settings: SettlementSettings, sub: S
     if (open.length > 0) return;
     const due = await uninvoiced(ctx, s.id);
     if (due <= 0n) return;
-    const closing = ctx.now.getTime() >= cur.end.getTime() - settings.closeWindowMs(periodMs);
+    // A subscription replaced by a plan change collects what is owed at once: it grants nothing more.
+    const closing = s.replacedBy !== null || ctx.now.getTime() >= cur.end.getTime() - settings.closeWindowMs(periodMs);
     if (due < settings.threshold && !closing) return;
     const invoiceId = newId("inv");
     await ctx.tx.insert(invoices).values({
@@ -370,6 +377,16 @@ async function collect(
   const { left, periodEnd } = ceilingLeft(plan, onchain, now);
   let amount = due;
 
+  if (left < due && invoice.kind === "topup") {
+    // A refill is all or nothing: drop it rather than grant part of it.
+    await withCustomer(db, sub, async (ctx) => {
+      await ctx.tx
+        .update(invoices)
+        .set({ status: "void" })
+        .where(and(eq(invoices.id, invoice.id), eq(invoices.status, "open")));
+    });
+    return false;
+  }
   if (left < due) {
     // Cut to what the ceiling allows, write off the rest, and stop overage until the period ends (doc 03).
     const cut = due - left;
@@ -435,7 +452,7 @@ export async function applyPullOutcome(db: Db, chain: Chain, settings: Settlemen
   if (o.state === "pending") return;
   const [att] = await db.select().from(settlementAttempts).where(eq(settlementAttempts.id, attemptId));
   if (!att || att.status !== "pending") return;
-  const [sub] = await db.select().from(subscriptions).where(eq(subscriptions.id, att.subscriptionId));
+  const [sub] = await db.select().from(subscriptions).where(eq(subscriptions.id, att.subscriptionId!));
 
   // Which on-chain period the pull counted against; recorded for `verify`.
   const onchain = o.state === "confirmed" && sub!.subscriptionPda ? await chain.getSubscription(sub!.subscriptionPda) : null;
@@ -443,7 +460,7 @@ export async function applyPullOutcome(db: Db, chain: Chain, settings: Settlemen
   await withCustomer(db, sub!, async (ctx) => {
     const [a] = await ctx.tx.select().from(settlementAttempts).where(eq(settlementAttempts.id, attemptId)).for("update");
     if (!a || a.status !== "pending") return;
-    const s = await reloadSub(ctx, a.subscriptionId);
+    const s = await reloadSub(ctx, a.subscriptionId!);
 
     if (o.state === "expired") {
       await ctx.tx.update(settlementAttempts).set({ status: "expired", resolvedAt: ctx.now }).where(eq(settlementAttempts.id, a.id));
@@ -492,9 +509,13 @@ async function onPaid(
     .set({ amountPaid, ...(paid && inv!.status === "open" ? { status: "paid" as const, paidAt: ctx.now } : {}) })
     .where(eq(invoices.id, inv!.id));
   if (paid) {
-    const lines = await ctx.tx.select().from(invoiceLines).where(and(eq(invoiceLines.invoiceId, inv!.id), eq(invoiceLines.kind, "overage")));
+    const lines = await ctx.tx.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, inv!.id));
     for (const l of lines) {
-      if (l.accrualId) await ctx.tx.update(accruals).set({ collected: sql`${accruals.collected} + ${l.amount}` }).where(eq(accruals.id, l.accrualId));
+      if (l.kind === "overage" && l.accrualId) {
+        await ctx.tx.update(accruals).set({ collected: sql`${accruals.collected} + ${l.amount}` }).where(eq(accruals.id, l.accrualId));
+      }
+      // An automatic top-up: the credits arrive once the money has.
+      if (l.kind === "topup" && l.featureId && l.quantity) await grantTopUp(ctx, l.featureId, l.quantity);
     }
   }
 
@@ -596,14 +617,13 @@ export async function finalizePayments(db: Db, chain: Chain, env: Env, now: Date
     if (st.state === "finalized") {
       await db.update(payments).set({ status: "finalized", finalizedAt: now }).where(eq(payments.id, p.id));
     } else if (st.state === "failed" || (st.state === "unknown" && now.getTime() - p.createdAt.getTime() > 10 * 60_000)) {
-      const [sub] = await db.select().from(subscriptions).where(eq(subscriptions.id, p.subscriptionId));
-      await withCustomer(db, sub!, async (ctx) => {
+      await inCustomerTx(db, scopeOf(p), p.customerId, async (ctx) => {
         await ctx.tx.update(payments).set({ status: "reverted" }).where(eq(payments.id, p.id));
         await ctx.tx
           .update(invoices)
           .set({ amountPaid: sql`${invoices.amountPaid} - ${p.amount}`, status: "open", paidAt: null })
           .where(eq(invoices.id, p.invoiceId));
-      });
+      }, { create: false });
     }
   }
 }

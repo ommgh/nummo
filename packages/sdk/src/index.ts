@@ -242,10 +242,39 @@ export class Nummo {
 
   /**
    * Put a customer on a plan. Free plans attach at once. A paid plan returns a
-   * `checkoutUrl` where the customer connects a wallet and signs once.
+   * `checkoutUrl` where the customer connects a wallet and signs once. Moving
+   * from a paid plan: an upgrade returns a checkout for the prorated difference;
+   * a downgrade returns `status: "scheduled"` and takes effect at the period end.
+   * Attaching the current plan again cancels a scheduled downgrade.
    */
   attach(p: { customerId: string; planId: string; version?: number; successUrl?: string; skipPayment?: boolean }) {
-    return this.request<{ subscriptionId: string; status: string; checkoutUrl: string | null; alreadyAttached?: boolean }>("POST", "/v1/attach", p);
+    return this.request<AttachResponse>("POST", "/v1/attach", p);
+  }
+
+  /** What attaching a plan would do and cost now, without changing anything. */
+  preview(p: { customerId: string; planId: string; version?: number }) {
+    return this.request<PreviewResponse>("POST", "/v1/preview", p);
+  }
+
+  /**
+   * A one-off purchase of a feature's balance (configured under `topUps`).
+   * `amount` is in token base units: `usdc("10")` from @usenummo/config.
+   * Returns a checkout URL where the customer pays with one signature.
+   */
+  topUp(p: { customerId: string; featureId: string; amount: bigint | string; successUrl?: string }) {
+    return this.request<{ checkoutUrl: string; featureId: string; quantity: string; amount: string }>("POST", "/v1/topups", {
+      ...p,
+      amount: p.amount.toString(),
+    });
+  }
+
+  /**
+   * A link to the hosted customer portal: plan, ceiling, usage, receipts, plan
+   * changes, top-ups, and cancel signed by the customer's wallet. Valid for an hour;
+   * create one each time the customer opens billing.
+   */
+  portal(p: { customerId: string; returnUrl?: string }) {
+    return this.request<{ url: string; expiresAt: string }>("POST", "/v1/portal", p);
   }
 
   /** Compare nummo's records with the chain (doc 04, `nummo verify`). */
@@ -282,6 +311,10 @@ export class Nummo {
   };
 
   readonly customers = {
+    list: (p: { search?: string; limit?: number; offset?: number } = {}) => {
+      const qs = new URLSearchParams(Object.entries(p).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]));
+      return this.request<{ total: number; customers: CustomerSummary[] }>("GET", `/v1/customers${qs.size ? `?${qs}` : ""}`);
+    },
     get: (id: string) => this.request<Customer>("GET", `/v1/customers/${encodeURIComponent(id)}`),
     invoices: (id: string) => this.request<{ invoices: Invoice[] }>("GET", `/v1/customers/${encodeURIComponent(id)}/invoices`),
     upsert: (id: string, p: { name?: string | null; email?: string | null } = {}) =>
@@ -310,7 +343,7 @@ export type Customer = {
     planName: string;
     version: number;
     status: string;
-    price: { amount: string; periodHours: number } | null;
+    price: { amount: string; periodHours: number; period: string } | null;
     ceiling: string | null;
     currentPeriodStart: string | null;
     currentPeriodEnd: string | null;
@@ -321,7 +354,15 @@ export type Customer = {
     pastDueSince: string | null;
     nextRetryAt: string | null;
     endedReason: string | null;
+    /** Set when an immediate plan change replaced it; it grants nothing and ends with its on-chain period. */
+    replacedBy: string | null;
+    /** A downgrade waiting for the period end. */
+    scheduledChange: { planId: string; version: number; name: string; effectiveAt: string } | null;
+    createdAt: string;
+    endedAt: string | null;
   }[];
+  /** Checkouts waiting for the customer to sign. */
+  pendingCheckouts: { id: string; kind: "subscribe" | "change" | "topup"; status: string; planId: string | null; version: number | null; featureId: string | null; amount: string; expiresAt: string }[];
   balances: {
     featureId: string;
     balance: string;
@@ -331,17 +372,48 @@ export type Customer = {
   invoices: Invoice[];
 };
 
+export type AttachResponse = {
+  subscriptionId: string | null;
+  status: "active" | "pending" | "scheduled" | "past_due" | "canceling";
+  checkoutUrl: string | null;
+  alreadyAttached: boolean;
+  /** An upgrade from a paid plan: credit for the unused part of the period, and what is due now. */
+  proration?: { credit: string; dueNow: string };
+  /** A downgrade: when it takes effect. */
+  effectiveAt?: string;
+  replaced?: string[];
+};
+
+export type PreviewResponse = {
+  change: "new" | "upgrade" | "downgrade" | "none" | "blocked";
+  plan: { planId: string; version: number; name: string; price: { amount: string; periodHours: number; period: string } | null; ceiling: string | null };
+  from: { planId: string; version: number; subscriptionId: string } | null;
+  dueNow: string;
+  credit: string;
+  effectiveAt: string | null;
+  signatureRequired: boolean;
+  reason?: string;
+};
+
+export type CustomerSummary = {
+  id: string;
+  name: string | null;
+  email: string | null;
+  createdAt: string;
+  plans: { planId: string; version: number; name: string; status: string; paid: boolean }[];
+};
+
 export type Invoice = {
   id: string;
-  subscriptionId: string;
-  kind: "activation" | "renewal" | "overage";
+  subscriptionId: string | null;
+  kind: "activation" | "renewal" | "overage" | "topup";
   status: "open" | "paid" | "void" | "uncollectible";
   periodStart: string;
   total: string;
   amountPaid: string;
   createdAt: string;
   paidAt: string | null;
-  lines: { kind: "base" | "overage" | "writeoff"; featureId: string | null; quantity: string | null; amount: string }[];
+  lines: { kind: "base" | "overage" | "writeoff" | "proration" | "topup"; featureId: string | null; quantity: string | null; amount: string }[];
   payments: { signature: string; amount: string; status: string; createdAt: string }[];
 };
 

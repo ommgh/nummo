@@ -82,18 +82,38 @@ export type SendResult =
 export type ActivationInput = {
   plan: OnchainPlan;
   subscriber: string;
-  /** First pull inside the activation (the base fee). 0 skips the pull. */
+  /** First pull inside the activation (the base fee, or the prorated difference). 0 skips the pull. */
   firstPull: bigint;
+  /**
+   * A plan change (doc 03, "Plan changes"): also cancel the subscriber's
+   * subscription to this plan, in the same transaction. It then ends at the end
+   * of its current period; ending it at once would need the merchant's key.
+   */
+  cancel?: { plan: string };
 };
 
-export type BuiltActivation = {
+/** A transaction for a customer's wallet to sign. The puller pays the fee and co-signs after. */
+export type BuiltTx = {
   /** Unsigned wire transaction, base64, for the wallet to sign. */
   transaction: string;
   /** The message bytes, base64. The signed copy must carry exactly these. */
   message: string;
   lastValidBlockHeight: bigint;
+};
+
+export type BuiltActivation = BuiltTx & {
   /** True when this wallet had no Subscription Authority and the transaction creates one. */
   createsAuthority: boolean;
+};
+
+export type TransferInput = {
+  /** The customer's wallet; its token account pays. */
+  from: string;
+  /** The merchant's wallet; its token account receives. */
+  to: string;
+  amount: bigint;
+  /** A random address added read-only to the transfer, so the payment can be found by it (Solana Pay convention). */
+  reference: string;
 };
 
 export type PullInput = {
@@ -122,14 +142,30 @@ export interface Chain {
   getBlockHeight(): Promise<bigint>;
   getStatuses(signatures: string[]): Promise<TxStatus[]>;
 
-  /** Build the one-signature activation: [init authority] + subscribe + first pull, puller as fee payer. */
+  /** Build the one-signature activation: [init authority] + subscribe + first pull [+ cancel the old plan], puller as fee payer. */
   buildActivation(input: ActivationInput): Promise<BuiltActivation>;
+  /** cancelSubscription, signed by the subscriber: the subscription ends at the end of its current period. */
+  buildCancel(input: { plan: string; subscriber: string }): Promise<BuiltTx>;
+  /** resumeSubscription, signed by the subscriber, before a cancelled subscription ends. */
+  buildResume(input: { plan: string; subscriber: string; expiresAt: Date }): Promise<BuiltTx>;
+  /** A plain token transfer the customer signs: a one-off purchase (doc 03, "One-off purchases"). */
+  buildTransfer(input: TransferInput): Promise<BuiltTx>;
   /**
-   * Check that a wallet-signed activation carries exactly `expectedMessage` and a
-   * valid signature from `subscriber`, then add the puller's signature.
+   * createPlan for a plan version, to be signed by the merchant's own wallet in
+   * the browser (the dashboard's publish step). The merchant is fee payer and
+   * pays rent; the destination list holds the merchant alone and the puller is
+   * the only listed puller, as `nummo plans publish` does.
+   */
+  buildCreatePlan(input: { owner: string; planId: bigint; amount: bigint; periodHours: number; metadataUri: string }): Promise<BuiltTx & { planAddress: string }>;
+  /** A fresh random address, for a transfer's reference key. */
+  newReference(): string;
+  /**
+   * Check that a wallet-signed transaction carries exactly `expectedMessage` and a
+   * valid signature from `signer`, then add the puller's signature if the
+   * puller is a required signer (it is not for buildCreatePlan).
    * Throws ActivationRejected otherwise.
    */
-  cosignActivation(signedTransaction: string, expectedMessage: string, subscriber: string, lastValidBlockHeight: bigint): Promise<PreparedTx>;
+  cosign(signedTransaction: string, expectedMessage: string, signer: string, lastValidBlockHeight: bigint): Promise<PreparedTx>;
   preparePull(input: PullInput): Promise<PreparedTx>;
   send(tx: PreparedTx): Promise<SendResult>;
 }

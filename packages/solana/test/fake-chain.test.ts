@@ -11,7 +11,7 @@ describe("FakeChain follows the program as observed on devnet (spike S1)", () =>
     const plan = chain.createPlan({ owner: "merchant", amount: 70n * U, periodHours: 1 });
     const wallet = chain.wallet(200n * U);
     const built = await chain.buildActivation({ plan, subscriber: wallet, firstPull: 20n * U });
-    const tx = await chain.cosignActivation(chain.walletSign(built.transaction, wallet), built.message, wallet, built.lastValidBlockHeight);
+    const tx = await chain.cosign(chain.walletSign(built.transaction, wallet), built.message, wallet, built.lastValidBlockHeight);
     expect(await chain.send(tx)).toEqual({ ok: true });
     const subAddr = await chain.findSubscriptionAddress(plan.address, wallet);
 
@@ -41,7 +41,7 @@ describe("FakeChain follows the program as observed on devnet (spike S1)", () =>
     const plan = chain.createPlan({ owner: "m", amount: 10n * U, periodHours: 1 });
     const wallet = chain.wallet(3n * U);
     const b = await chain.buildActivation({ plan, subscriber: wallet, firstPull: 2n * U });
-    await chain.send(await chain.cosignActivation(chain.walletSign(b.transaction, wallet), b.message, wallet, b.lastValidBlockHeight));
+    await chain.send(await chain.cosign(chain.walletSign(b.transaction, wallet), b.message, wallet, b.lastValidBlockHeight));
     const subAddr = await chain.findSubscriptionAddress(plan.address, wallet);
     const pull = async (amount: bigint) => {
       const r = await chain.send(await chain.preparePull({ plan, subscriptionAddress: subAddr, subscriber: wallet, amount }));

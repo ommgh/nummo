@@ -12,6 +12,7 @@ import {
   accrualKey,
   currentBillingPeriod,
   formatQty,
+  periodAt,
   qty,
   reconcileGrants,
 } from "@usenummo/core";
@@ -40,6 +41,19 @@ export type CustomerCtx = {
   snapshot: CustomerSnapshot;
   /** Current-period accrual rows keyed by accrualKey(subscriptionId, featureId). */
   accruals: Map<string, AccrualRow>;
+  /** Automatic top-ups configured on the customer's live paid subscriptions. */
+  autoTopUps: AutoTopUp[];
+};
+
+export type AutoTopUp = {
+  subscriptionId: string;
+  status: string;
+  featureId: string;
+  below: bigint;
+  quantity: bigint;
+  price: bigint;
+  maxPerPeriod: number;
+  periodStart: Date;
 };
 
 export function rowToGrant(r: typeof grants.$inferSelect): Grant {
@@ -162,6 +176,8 @@ export async function loadSnapshot(tx: Tx, scope: Scope, customerId: string, now
         eq(subscriptions.env, scope.env),
         eq(subscriptions.customerId, customerId),
         inArray(subscriptions.status, [...LIVE_STATUSES]),
+        // A subscription replaced by an immediate plan change keeps collecting, but grants nothing.
+        isNull(subscriptions.replacedBy),
       ),
     );
 
@@ -173,8 +189,21 @@ export async function loadSnapshot(tx: Tx, scope: Scope, customerId: string, now
     : [];
 
   const items: EntitlementItem[] = [];
+  const autoTopUps: AutoTopUp[] = [];
   for (const { sub, pv } of subRows) {
     for (const it of itemRows.filter((i) => i.planVersionId === pv.id)) {
+      if (it.autoTopUpPrice !== null && pv.periodHours !== null && sub.wallet !== null) {
+        autoTopUps.push({
+          subscriptionId: sub.id,
+          status: sub.status,
+          featureId: it.featureId,
+          below: qty(it.autoTopUpBelow!),
+          quantity: qty(it.autoTopUpQuantity!),
+          price: it.autoTopUpPrice,
+          maxPerPeriod: it.autoTopUpMaxPerPeriod!,
+          periodStart: periodAt(sub.periodAnchor, pv.periodHours, now).start,
+        });
+      }
       const reset =
         it.resetKind === "never"
           ? ({ kind: "never" } as const)
@@ -229,7 +258,7 @@ export async function loadSnapshot(tx: Tx, scope: Scope, customerId: string, now
         .map((r) => r.sub.id),
     ),
   };
-  return { snapshot, accruals: current, subscriptions: subRows };
+  return { snapshot, accruals: current, subscriptions: subRows, autoTopUps };
 }
 
 /** Rule 9, lazily: issue this period's plan grants and zero out expired ones. */
@@ -292,7 +321,16 @@ export async function inCustomerTx<T>(
     if (await reconcile(tx, scope, customerId, loaded.snapshot, now)) {
       loaded = await loadSnapshot(tx, scope, customerId, now);
     }
-    const ctx: CustomerCtx = { tx, scope, customerId, now, catalog, snapshot: loaded.snapshot, accruals: loaded.accruals };
+    const ctx: CustomerCtx = {
+      tx,
+      scope,
+      customerId,
+      now,
+      catalog,
+      snapshot: loaded.snapshot,
+      accruals: loaded.accruals,
+      autoTopUps: loaded.autoTopUps,
+    };
     return fn(ctx);
   });
 }
@@ -302,4 +340,5 @@ export async function refresh(ctx: CustomerCtx): Promise<void> {
   const loaded = await loadSnapshot(ctx.tx, ctx.scope, ctx.customerId, ctx.now);
   ctx.snapshot = loaded.snapshot;
   ctx.accruals = loaded.accruals;
+  ctx.autoTopUps = loaded.autoTopUps;
 }

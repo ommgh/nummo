@@ -46,9 +46,11 @@ export const ledgerReasonEnum = pgEnum("ledger_reason", [
 ]);
 export const lockStatusEnum = pgEnum("lock_status", ["held", "confirmed", "released", "expired"]);
 export const checkoutStatusEnum = pgEnum("checkout_status", ["open", "submitted", "completed", "expired"]);
-export const invoiceKindEnum = pgEnum("invoice_kind", ["activation", "renewal", "overage"]);
+/** subscribe: first paid plan. change: an immediate upgrade from another paid plan. topup: a one-off purchase. */
+export const checkoutKindEnum = pgEnum("checkout_kind", ["subscribe", "change", "topup"]);
+export const invoiceKindEnum = pgEnum("invoice_kind", ["activation", "renewal", "overage", "topup"]);
 export const invoiceStatusEnum = pgEnum("invoice_status", ["open", "paid", "void", "uncollectible"]);
-export const invoiceLineKindEnum = pgEnum("invoice_line_kind", ["base", "overage", "writeoff"]);
+export const invoiceLineKindEnum = pgEnum("invoice_line_kind", ["base", "overage", "writeoff", "proration", "topup"]);
 export const attemptStatusEnum = pgEnum("attempt_status", ["pending", "confirmed", "failed", "expired"]);
 export const paymentStatusEnum = pgEnum("payment_status", ["confirmed", "finalized", "reverted"]);
 
@@ -168,6 +170,11 @@ export const planItems = pgTable(
     overagePrice: money("overage_price"),
     overagePer: qty("overage_per"),
     overageCap: money("overage_cap"),
+    /** Automatic top-up (doc 04): below this balance, pull `auto_topup_price` and grant `auto_topup_quantity`. */
+    autoTopUpBelow: qty("auto_topup_below"),
+    autoTopUpQuantity: qty("auto_topup_quantity"),
+    autoTopUpPrice: money("auto_topup_price"),
+    autoTopUpMaxPerPeriod: integer("auto_topup_max_per_period"),
   },
   (t) => [uniqueIndex("plan_items_uq").on(t.planVersionId, t.featureId)],
 );
@@ -221,6 +228,15 @@ export const subscriptions = pgTable(
     nextRetryAt: ts("next_retry_at"),
     /** Set when a pull was cut to what the on-chain ceiling had left; overage stops until then. */
     overageBlockedUntil: ts("overage_blocked_until"),
+    /**
+     * Set when an immediate plan change replaced this subscription. Its
+     * entitlements stopped then; it stays `canceling` until the on-chain record
+     * ends, so overage already used can still be collected.
+     */
+    replacedBy: text("replaced_by"),
+    /** A downgrade waiting for the period end: the plan version to move to, and when. */
+    scheduledPlanVersionId: text("scheduled_plan_version_id"),
+    scheduledAt: ts("scheduled_at"),
     createdAt: ts("created_at").notNull().defaultNow(),
     endedAt: ts("ended_at"),
     endedReason: text("ended_reason"),
@@ -353,13 +369,23 @@ export const checkoutSessions = pgTable(
     id: text("id").primaryKey(),
     ...scope,
     customerId: text("customer_id").notNull(),
-    planVersionId: text("plan_version_id")
-      .notNull()
-      .references(() => planVersions.id),
-    /** The pending subscription this checkout activates. */
-    subscriptionId: text("subscription_id").notNull(),
+    kind: checkoutKindEnum("kind").notNull().default("subscribe"),
+    /** subscribe and change: the plan version being activated. */
+    planVersionId: text("plan_version_id").references(() => planVersions.id),
+    /** subscribe and change: the pending subscription this checkout activates. */
+    subscriptionId: text("subscription_id"),
+    /** change: the paid subscription being replaced. Its wallet must sign. */
+    replacesSubscriptionId: text("replaces_subscription_id"),
+    /** change: the credit for the unused part of the old period, { credit, periodStart, periodEnd }. */
+    proration: jsonb("proration"),
+    /** topup: what is bought, and where the payment goes. */
+    featureId: text("feature_id"),
+    quantity: qty("quantity"),
+    payTo: text("pay_to"),
+    /** topup: a random public key added to the transfer, so the payment can be found (the Solana Pay convention). */
+    reference: text("reference"),
     status: checkoutStatusEnum("status").notNull().default("open"),
-    /** First charge pulled inside the activation transaction (the base fee). */
+    /** What the customer pays in this transaction: the base fee, the prorated difference, or the top-up price. */
     amount: money("amount").notNull(),
     wallet: text("wallet"),
     /** The transaction message we built, base64. The signed copy must match it byte for byte. */
@@ -381,7 +407,8 @@ export const invoices = pgTable(
     id: text("id").primaryKey(),
     ...scope,
     customerId: text("customer_id").notNull(),
-    subscriptionId: text("subscription_id").notNull(),
+    /** Null for a one-off top-up. */
+    subscriptionId: text("subscription_id"),
     kind: invoiceKindEnum("kind").notNull(),
     /** The billing period the invoice belongs to. */
     periodStart: ts("period_start").notNull(),
@@ -426,7 +453,8 @@ export const settlementAttempts = pgTable(
   {
     id: text("id").primaryKey(),
     ...scope,
-    subscriptionId: text("subscription_id").notNull(),
+    /** Null for a one-off top-up. */
+    subscriptionId: text("subscription_id"),
     invoiceId: text("invoice_id"),
     checkoutSessionId: text("checkout_session_id"),
     attempt: integer("attempt").notNull(),
@@ -456,7 +484,8 @@ export const payments = pgTable(
     id: text("id").primaryKey(),
     ...scope,
     customerId: text("customer_id").notNull(),
-    subscriptionId: text("subscription_id").notNull(),
+    /** Null for a one-off top-up. */
+    subscriptionId: text("subscription_id"),
     invoiceId: text("invoice_id").notNull(),
     signature: text("signature").notNull(),
     amount: money("amount").notNull(),
@@ -466,6 +495,49 @@ export const payments = pgTable(
   },
   (t) => [uniqueIndex("payments_sig_uq").on(t.signature), index("payments_invoice_idx").on(t.invoiceId)],
 );
+
+/** Per-environment settings that come from the pricing config but are not plans or features. */
+export const envSettings = pgTable(
+  "env_settings",
+  {
+    ...scope,
+    /** Merchant wallet for one-off top-ups. Null: the owner of the latest published plan. */
+    payTo: text("pay_to"),
+    /** TopUpDoc[] from the config: which features can be bought, and at what price. */
+    topUps: jsonb("top_ups").notNull().default(sql`'[]'::jsonb`),
+    updatedAt: ts("updated_at").notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.orgId, t.env] })],
+);
+
+/**
+ * A customer portal link (doc 04, "Customer portal"). Like a checkout, the long
+ * random id is the only credential. `pending` holds the transaction the
+ * customer's wallet is asked to sign (cancel or resume), so the signed copy can
+ * be checked byte for byte.
+ */
+export const portalSessions = pgTable(
+  "portal_sessions",
+  {
+    id: text("id").primaryKey(),
+    ...scope,
+    customerId: text("customer_id").notNull(),
+    returnUrl: text("return_url"),
+    pending: jsonb("pending"),
+    createdAt: ts("created_at").notNull().defaultNow(),
+    expiresAt: ts("expires_at").notNull(),
+  },
+  (t) => [index("portal_sessions_customer_idx").on(t.orgId, t.env, t.customerId)],
+);
+
+/** Merchant dashboard sign-ins. The cookie holds a random token; we store its hash. */
+export const dashboardSessions = pgTable("dashboard_sessions", {
+  tokenHash: text("token_hash").primaryKey(),
+  ...scope,
+  apiKeyId: text("api_key_id").notNull(),
+  createdAt: ts("created_at").notNull().defaultNow(),
+  expiresAt: ts("expires_at").notNull(),
+});
 
 // ------------------------------------------------------------------ webhooks
 

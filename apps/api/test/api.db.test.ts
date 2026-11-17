@@ -141,3 +141,82 @@ describe("settlement routes", () => {
     await expect(nummo.verify()).rejects.toMatchObject({ code: "settlement_unavailable", status: 503 });
   });
 });
+
+describe("M3 routes: preview, top-ups, portal, dashboard", () => {
+  test("through the SDK and the public pages", async () => {
+    const { FakeChain } = await import("@usenummo/solana/testing");
+    const { planIdSeed } = await import("@usenummo/settlement");
+    const { usdc } = await import("@usenummo/config");
+    const chain = new FakeChain({ now: new Date() });
+    const orgId = await createOrg(db, "M3 Shop");
+    const k = (await createApiKey(db, orgId, "test")).key;
+    const srv = serve({ fetch: createApp(db, { chains: { test: chain } }).fetch, port: 0 });
+    await new Promise((r) => srv.once("listening", r));
+    const url = `http://127.0.0.1:${(srv.address() as AddressInfo).port}`;
+    try {
+      const nummo = new Nummo({ secretKey: k, baseUrl: url });
+      await nummo.config.push(toDocument({ ...exampleConfig, topUps: [{ feature: "credits", price: usdc("1"), per: 100 }] }));
+      const owner = "merchant_wallet_m3";
+      const p = chain.createPlan({ owner, planId: planIdSeed({ orgId, env: "test" }, "pro", 1), amount: 70_000_000n, periodHours: 720 });
+      await nummo.plans.publish("pro", 1, p.address);
+
+      expect(await nummo.preview({ customerId: "shopper", planId: "pro" })).toMatchObject({ change: "new", dueNow: "20", signatureRequired: true });
+
+      // One-off top-up, paid through the public checkout routes.
+      const t = await nummo.topUp({ customerId: "shopper", featureId: "credits", amount: usdc("5") });
+      expect(t).toMatchObject({ quantity: "500", amount: "5" });
+      const path = new URL(t.checkoutUrl).pathname;
+      const session = await (await fetch(`${url}${path}/session`)).json();
+      expect(session).toMatchObject({ kind: "topup", firstCharge: "5", topup: { quantity: "500", payTo: owner } });
+      const wallet = chain.wallet(usdc("9"));
+      const post = (base: string, sub: string, b: unknown) => fetch(`${url}${base}${sub}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(b) });
+      const { transaction } = await (await post(path, "/transaction", { wallet })).json();
+      expect((await (await post(path, "/submit", { signedTransaction: chain.walletSign(transaction, wallet) })).json()).status).toBe("completed");
+      expect((await nummo.customers.get("shopper")).balances[0]).toMatchObject({ featureId: "credits", balance: "600" });
+      await expect(nummo.topUp({ customerId: "shopper", featureId: "credits", amount: "10" })).rejects.toMatchObject({ code: "invalid_request" });
+
+      // Portal: a link the merchant creates, a page, and its data.
+      const { url: portalUrl } = await nummo.portal({ customerId: "shopper", returnUrl: "https://shop.example/account" });
+      const ppath = new URL(portalUrl).pathname;
+      expect((await fetch(`${url}${ppath}`)).headers.get("content-type")).toContain("text/html");
+      const data = await (await fetch(`${url}${ppath}/data`)).json();
+      expect(data).toMatchObject({ merchant: "M3 Shop", returnUrl: "https://shop.example/account", topUps: [{ featureId: "credits", price: "1", per: "100" }] });
+      expect(data.plans.map((x: { planId: string }) => x.planId)).toEqual(["free", "pro"]);
+      const change = await (await post(ppath, "/change", { planId: "pro" })).json();
+      expect(change.preview).toMatchObject({ change: "new", dueNow: "20" });
+      const started = await (await post(ppath, "/change", { planId: "pro", confirm: true })).json();
+      expect(started.result.checkoutUrl).toContain("/checkout/");
+      expect((await fetch(`${url}/portal/ps_unknown/data`)).status).toBe(404);
+
+      expect((await nummo.customers.list({ search: "shop" })).customers.map((c) => c.id)).toEqual(["shopper"]);
+
+      // Dashboard: sign in with the key, see the payment, sign out.
+      expect((await fetch(`${url}/dashboard`, { redirect: "manual" })).headers.get("location")).toBe("/dashboard/login");
+      const bad = await fetch(`${url}/dashboard/login`, { method: "POST", body: new URLSearchParams({ key: "nummo_sk_test_nope" }), redirect: "manual" });
+      expect(bad.status).toBe(401);
+      const login = await fetch(`${url}/dashboard/login`, { method: "POST", body: new URLSearchParams({ key: k }), redirect: "manual" });
+      const cookie = login.headers.get("set-cookie")!;
+      expect(cookie).toMatch(/HttpOnly/i);
+      expect(cookie).toMatch(/SameSite=Strict/i);
+      expect(cookie).not.toContain(k);
+      const auth = { headers: { cookie: cookie.split(";")[0]! } };
+      const home = await (await fetch(`${url}/dashboard`, auth)).text();
+      expect(home).toContain("M3 Shop");
+      expect(home).toMatch(/Collected, last 30 days<\/div><div class="v">5 /);
+      for (const page of ["customers", "customers/shopper", "plans", "payments", "usage", "webhooks"]) {
+        const r = await fetch(`${url}/dashboard/${page}`, auth);
+        expect(r.status, page).toBe(200);
+      }
+      const detail = await (await fetch(`${url}/dashboard/customers/shopper`, auth)).text();
+      expect(detail).toContain("topup");
+      // Customer-supplied text is escaped.
+      await nummo.customers.upsert("xss", { name: "<script>alert(1)</script>" });
+      expect(await (await fetch(`${url}/dashboard/customers?q=xss`, auth)).text()).toContain("&lt;script&gt;");
+
+      await fetch(`${url}/dashboard/logout`, { method: "POST", ...auth, redirect: "manual" });
+      expect((await fetch(`${url}/dashboard`, { ...auth, redirect: "manual" })).status).toBe(302);
+    } finally {
+      await new Promise((r) => srv.close(r));
+    }
+  });
+});

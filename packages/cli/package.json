@@ -4,7 +4,7 @@
   "license": "Apache-2.0",
   "private": true,
   "type": "module",
-  "description": "The nummo CLI: push pricing config, publish plans on-chain, verify against the chain. Published later as the unscoped `nummo` package.",
+  "description": "The nummo CLI: log in, scaffold a config, push pricing, publish plans on-chain, create devnet wallets, inspect customers, verify against the chain. Published later as the unscoped `nummo` package.",
   "bin": {
     "nummo": "./src/main.ts"
   },

@@ -38,6 +38,18 @@ export type PlanItemInput = {
     /** Most overage may cost in one billing period, in base units. Required: it is part of the on-chain ceiling. */
     cap: BaseUnits;
   };
+  /**
+   * Refill automatically when the balance drops below `below`: pull `price` from
+   * the subscription and grant `quantity`, at most `maxPerPeriod` times a period.
+   * `price * maxPerPeriod` is added to the on-chain ceiling, so no extra
+   * signature is needed after activation (doc 04, top-ups).
+   */
+  autoTopUp?: {
+    below: number | string;
+    quantity: number | string;
+    price: BaseUnits;
+    maxPerPeriod: number;
+  };
 };
 
 export type PlanInput = {
@@ -52,10 +64,26 @@ export type PlanInput = {
   items: PlanItemInput[];
 };
 
+/** A one-off purchase of a feature's balance: `price` base units buys `per` units. */
+export type TopUpInput = {
+  feature: string;
+  price: BaseUnits;
+  per?: number | string;
+  /** Smallest and largest purchase, in base units. Default 1 USDC to 1,000 USDC. */
+  min?: BaseUnits;
+  max?: BaseUnits;
+};
+
 export type ConfigInput = {
   mint?: "USDC";
+  /**
+   * The merchant wallet that receives one-off top-up payments. Defaults to the
+   * owner of the most recently published plan.
+   */
+  payTo?: string;
   features: FeatureInput[];
   plans: PlanInput[];
+  topUps?: TopUpInput[];
 };
 
 export function feature<const F extends FeatureInput>(f: F): F {
@@ -93,6 +121,10 @@ export const planItemDocSchema = z.object({
   /** Hours between resets, "period", or "never". */
   reset: z.union([z.literal("period"), z.literal("never"), z.number().int().positive()]),
   overage: z.object({ price: baseUnits, per: decimal, cap: baseUnits }).nullable(),
+  autoTopUp: z
+    .object({ below: decimal, quantity: decimal, price: baseUnits, maxPerPeriod: z.number().int().positive().max(100) })
+    .nullable()
+    .default(null),
 });
 
 export const planDocSchema = z.object({
@@ -105,15 +137,22 @@ export const planDocSchema = z.object({
   items: z.array(planItemDocSchema),
 });
 
+export const topUpDocSchema = z.object({ feature: id, price: baseUnits, per: decimal, min: baseUnits, max: baseUnits });
+
+const solanaAddress = z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/, "a base58 Solana address");
+
 export const configDocSchema = z.object({
   mint: z.literal("USDC"),
+  payTo: solanaAddress.nullable().default(null),
   features: z.array(featureDocSchema),
   plans: z.array(planDocSchema),
+  topUps: z.array(topUpDocSchema).default([]),
 });
 
 export type FeatureDoc = z.infer<typeof featureDocSchema>;
 export type PlanItemDoc = z.infer<typeof planItemDocSchema>;
 export type PlanDoc = z.infer<typeof planDocSchema>;
+export type TopUpDoc = z.infer<typeof topUpDocSchema>;
 export type ConfigDoc = z.infer<typeof configDocSchema>;
 
 export class ConfigError extends Error {
@@ -139,6 +178,14 @@ export function toDocument(input: ConfigInput): ConfigDoc {
 
   const doc = {
     mint: input.mint ?? "USDC",
+    payTo: input.payTo ?? null,
+    topUps: (input.topUps ?? []).map((t) => ({
+      feature: t.feature,
+      price: t.price.toString(),
+      per: formatQty(qty(t.per ?? 1)),
+      min: (t.min ?? usdc("1")).toString(),
+      max: (t.max ?? usdc("1000")).toString(),
+    })),
     features: input.features.map((f) =>
       f.type === "credit_system"
         ? { ...f, rates: f.rates.map((r) => ({ feature: r.feature, credits: formatQty(qty(r.credits)) })) }
@@ -167,6 +214,14 @@ export function toDocument(input: ConfigInput): ConfigDoc {
             : (attempt(`plan ${p.id} item ${i.feature} reset`, () => parseHours(i.reset!)) ?? 0),
         overage: i.overage
           ? { price: i.overage.price.toString(), per: formatQty(qty(i.overage.per ?? 1)), cap: i.overage.cap.toString() }
+          : null,
+        autoTopUp: i.autoTopUp
+          ? {
+              below: formatQty(qty(i.autoTopUp.below)),
+              quantity: formatQty(qty(i.autoTopUp.quantity)),
+              price: i.autoTopUp.price.toString(),
+              maxPerPeriod: i.autoTopUp.maxPerPeriod,
+            }
           : null,
       })),
     })),
@@ -243,9 +298,30 @@ export function validateDocument(raw: unknown): ConfigDoc {
         if (qty(i.overage.per) <= 0n) issues.push(`${iw}: overage "per" must be positive`);
         if (BigInt(i.overage.cap) === 0n) issues.push(`${iw}: overage cap must be greater than 0`);
       }
+      if (i.autoTopUp) {
+        if (!paid) issues.push(`${iw}: automatic top-up is pulled from the subscription, so it needs a paid plan (the price may be 0)`);
+        if (qty(i.autoTopUp.quantity) <= 0n) issues.push(`${iw}: automatic top-up quantity must be positive`);
+        if (BigInt(i.autoTopUp.price) === 0n) issues.push(`${iw}: automatic top-up price must be greater than 0`);
+        if (f.type === "metered" && creditSystemOf.has(f.id)) {
+          issues.push(`${iw}: ${f.id} draws from credit system ${creditSystemOf.get(f.id)}; put the automatic top-up on that`);
+        }
+      }
     }
   }
   if (defaults > 1) issues.push("only one plan version can be the default");
+
+  const topUpFeatures = new Set<string>();
+  for (const t of doc.topUps) {
+    const tw = `top-up for ${t.feature}`;
+    const f = features.get(t.feature);
+    if (!f) issues.push(`${tw}: unknown feature`);
+    else if (f.type === "boolean") issues.push(`${tw}: a boolean feature has no balance to top up`);
+    if (topUpFeatures.has(t.feature)) issues.push(`${tw} is declared twice`);
+    topUpFeatures.add(t.feature);
+    if (BigInt(t.price) === 0n) issues.push(`${tw}: price must be greater than 0`);
+    if (qty(t.per) <= 0n) issues.push(`${tw}: "per" must be positive`);
+    if (BigInt(t.min) === 0n || BigInt(t.min) > BigInt(t.max)) issues.push(`${tw}: need 0 < min <= max`);
+  }
 
   if (issues.length) throw new ConfigError(issues);
   return doc;
@@ -254,10 +330,15 @@ export function validateDocument(raw: unknown): ConfigDoc {
 /**
  * The on-chain Subscription Plan for a paid plan version (decision D3): its
  * amount is the most the version can ever charge in a period, the base price
- * plus every overage cap. Free plans with no overage need nothing on-chain.
+ * plus every overage cap plus the most automatic top-ups can cost. Free plans
+ * need nothing on-chain.
  */
 export function onchainTerms(p: PlanDoc): { amount: bigint; periodHours: number } | null {
   if (!p.price) return null;
-  const caps = p.items.reduce((sum, i) => sum + (i.overage ? BigInt(i.overage.cap) : 0n), 0n);
+  const caps = p.items.reduce(
+    (sum, i) =>
+      sum + (i.overage ? BigInt(i.overage.cap) : 0n) + (i.autoTopUp ? BigInt(i.autoTopUp.price) * BigInt(i.autoTopUp.maxPerPeriod) : 0n),
+    0n,
+  );
   return { amount: BigInt(p.price.amount) + caps, periodHours: p.price.periodHours };
 }

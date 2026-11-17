@@ -12,11 +12,14 @@ import {
   attach,
   NummoError,
   check,
+  createTopUp,
   finalize,
   getCustomer,
   grantBalance,
+  listCustomers,
   listEvents,
   listInvoices,
+  preview,
   resolveApiKey,
   track,
   trackBatch,
@@ -26,7 +29,13 @@ import {
 } from "@usenummo/db";
 import {
   type Chains,
+  createPortalSession,
   defaultSettings,
+  getPortal,
+  portalChange,
+  portalTopUp,
+  preparePortalAction,
+  submitPortalAction,
   deleteWebhookEndpoint,
   getCheckout,
   getWebhookEndpoint,
@@ -40,8 +49,12 @@ import {
   verify,
 } from "@usenummo/settlement";
 import { CHECKOUT_PAGE } from "./checkout-page.ts";
+import { PORTAL_PAGE } from "./portal-page.ts";
+import { dashboard } from "./dashboard.ts";
 
 const decimal = z.string().regex(/^\d+(\.\d{1,9})?$/, "a non-negative decimal string with up to 9 places");
+/** Amounts in requests are integer strings of token base units (doc 04): "10000000" is 10 USDC. */
+const baseUnits = z.string().regex(/^\d{1,20}$/, "an integer string of token base units");
 const id = z.string().min(1).max(255);
 const props = z.record(z.string(), z.unknown()).optional();
 
@@ -84,6 +97,12 @@ const schemas = {
     expiresAt: z.iso.datetime().nullable().optional(),
   }),
   customer: z.object({ name: z.string().nullable().optional(), email: z.email().nullable().optional() }),
+  preview: z.object({ customerId: id, planId: id, version: z.number().int().positive().optional() }),
+  topup: z.object({ customerId: id, featureId: id, amount: baseUnits, successUrl: z.url().optional() }),
+  portal: z.object({ customerId: id, returnUrl: z.url().optional() }),
+  portalAction: z.object({ action: z.enum(["cancel", "resume"]), subscriptionId: id, wallet: z.string().min(1).max(64) }),
+  portalChange: z.object({ planId: id, confirm: z.boolean().default(false) }),
+  portalTopUp: z.object({ featureId: id, amount: baseUnits }),
   publish: z.object({ address: z.string().min(32).max(64) }),
   webhook: z.object({ url: z.url() }),
   checkoutTx: z.object({ wallet: z.string().min(1).max(64) }),
@@ -150,6 +169,32 @@ export function createApp(db: Db, opts: AppOptions = {}) {
     const b = await body(c, schemas.checkoutSubmit);
     return c.json(await submitCheckout(db, chains, settings, c.req.param("id"), b.signedTransaction));
   });
+  // ---------------------------------------------------------------- customer portal (public, keyed by session id)
+
+  app.get("/portal/:id", (c) => c.html(PORTAL_PAGE));
+  app.get("/portal/:id/data", async (c) => c.json(await getPortal(db, chains, c.req.param("id"))));
+  app.post("/portal/:id/transaction", async (c) => {
+    const b = await body(c, schemas.portalAction);
+    return c.json(await preparePortalAction(db, chains, c.req.param("id"), b));
+  });
+  app.post("/portal/:id/submit", async (c) => {
+    const b = await body(c, schemas.checkoutSubmit);
+    return c.json(await submitPortalAction(db, chains, settings, c.req.param("id"), b.signedTransaction));
+  });
+  app.post("/portal/:id/change", async (c) => {
+    const b = await body(c, schemas.portalChange);
+    return c.json(await portalChange(db, c.req.param("id"), b, settings.publicUrl));
+  });
+  app.post("/portal/:id/topup", async (c) => {
+    const b = await body(c, schemas.portalTopUp);
+    return c.json(await portalTopUp(db, chains, c.req.param("id"), { featureId: b.featureId, amount: BigInt(b.amount) }, settings.publicUrl));
+  });
+
+  // ---------------------------------------------------------------- merchant dashboard (cookie session)
+
+  app.route("/dashboard", dashboard(db, chains, settings));
+  app.get("/", (c) => c.redirect("/dashboard"));
+
   // On-chain plan metadata URI.
   app.get("/p/:id", async (c) => {
     const m = await planMetadata(db, c.req.param("id"));
@@ -203,6 +248,27 @@ export function createApp(db: Db, opts: AppOptions = {}) {
     return c.json(await attach(db, c.get("scope"), b, { publicUrl: settings.publicUrl }));
   });
 
+  v1.post("/preview", async (c) => c.json(await preview(db, c.get("scope"), await body(c, schemas.preview))));
+
+  v1.post("/topups", async (c) => {
+    const b = await body(c, schemas.topup);
+    const scope = c.get("scope");
+    const chain = chainFor(scope);
+    return c.json(
+      await createTopUp(db, scope, { ...b, amount: BigInt(b.amount) }, { publicUrl: settings.publicUrl, reference: () => chain.newReference() }),
+      201,
+    );
+  });
+
+  v1.post("/portal", async (c) => {
+    const b = await body(c, schemas.portal);
+    return c.json(await createPortalSession(db, c.get("scope"), b, settings.publicUrl), 201);
+  });
+
+  v1.get("/customers", async (c) => {
+    const q = c.req.query();
+    return c.json(await listCustomers(db, c.get("scope"), { search: q.search, limit: q.limit ? Number(q.limit) : undefined, offset: q.offset ? Number(q.offset) : undefined }));
+  });
   v1.get("/customers/:id", async (c) => c.json(await getCustomer(db, c.get("scope"), c.req.param("id"))));
   v1.put("/customers/:id", async (c) => {
     const b = await body(c, schemas.customer);
@@ -258,17 +324,6 @@ export function createApp(db: Db, opts: AppOptions = {}) {
     const dryRun = c.req.query("dryRun") === "1" || c.req.query("dryRun") === "true";
     return c.json(await applyConfig(db, c.get("scope"), raw, { dryRun }));
   });
-
-  // Planned for later milestones (doc 05). Explicit, so clients get a clear answer.
-  for (const [method, path, milestone] of [
-    ["post", "/preview", "M3"],
-    ["post", "/topups", "M3"],
-    ["post", "/portal", "M3"],
-  ] as const) {
-    v1[method](path, () => {
-      throw new NummoError("not_implemented", `${path} arrives in milestone ${milestone}`);
-    });
-  }
 
   app.route("/v1", v1);
   return app;
