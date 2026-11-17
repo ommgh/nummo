@@ -9,7 +9,7 @@
 
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
-import { Nummo } from "@nummo/sdk";
+import { Nummo } from "@usenummo/sdk";
 
 const nummo = new Nummo();
 const app = new Hono();

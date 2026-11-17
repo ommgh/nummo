@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import type { AddressInfo } from "node:net";
 import { serve, type ServerType } from "@hono/node-server";
-import { toDocument } from "@nummo/config";
-import { createApiKey, createDb, createOrg, runMigrations } from "@nummo/db";
-import { Nummo, NummoApiError } from "@nummo/sdk";
+import { toDocument } from "@usenummo/config";
+import { createApiKey, createDb, createOrg, runMigrations } from "@usenummo/db";
+import { Nummo, NummoApiError } from "@usenummo/sdk";
 import { createApp } from "../src/app.ts";
 import { exampleConfig } from "../../../packages/db/test/helpers.ts";
 

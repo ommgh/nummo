@@ -11,17 +11,17 @@ Needs Node 22.18+ (TypeScript runs natively, no build step), pnpm and Docker.
 ```bash
 pnpm install
 pnpm db:up                                   # Postgres 18 on localhost:5434
-pnpm --filter @nummo/api bootstrap "Acme AI"  # creates an org, prints a test API key
+pnpm --filter @usenummo/api bootstrap "Acme AI"  # creates an org, prints a test API key
 export NUMMO_SECRET_KEY=nummo_sk_test_...      # the key it printed
 pnpm dev:api                                 # API on http://localhost:8787
 
 # in another shell, with NUMMO_SECRET_KEY set
-pnpm --filter @nummo/demo push                # apply apps/demo/nummo.config.ts
-pnpm --filter @nummo/demo dev                 # demo chat on http://localhost:3000
+pnpm --filter @usenummo/demo push                # apply apps/demo/nummo.config.ts
+pnpm --filter @usenummo/demo dev                 # demo chat on http://localhost:3000
 ```
 
 ```ts
-import { Nummo } from "@nummo/sdk";
+import { Nummo } from "@usenummo/sdk";
 const nummo = new Nummo(); // reads NUMMO_SECRET_KEY and NUMMO_API_URL
 
 const { allowed } = await nummo.check({ customerId: "user_123", featureId: "premium_message", sendEvent: true });

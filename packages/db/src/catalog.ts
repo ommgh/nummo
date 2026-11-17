@@ -3,8 +3,8 @@
  */
 
 import { and, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
-import { type ConfigDoc, ConfigError, onchainTerms, type PlanDoc, validateDocument } from "@nummo/config";
-import { type Catalog, type FeatureDef, qty } from "@nummo/core";
+import { type ConfigDoc, ConfigError, onchainTerms, type PlanDoc, validateDocument } from "@usenummo/config";
+import { type Catalog, type FeatureDef, qty } from "@usenummo/core";
 import type { Db, DbOrTx, Scope } from "./client.ts";
 import { NummoError } from "./errors.ts";
 import { newId } from "./ids.ts";

@@ -5,7 +5,7 @@
  */
 
 import { z } from "zod";
-import { type BaseUnits, formatQty, parseHours, qty, usdc } from "@nummo/core";
+import { type BaseUnits, formatQty, parseHours, qty, usdc } from "@usenummo/core";
 
 export { usdc };
 

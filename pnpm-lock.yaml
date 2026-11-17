@@ -127,7 +127,7 @@ importers:
       '@hono/node-server':
         specifier: ^2.1.9
         version: 2.1.9(hono@4.13.19)
-      '@nummo/db':
+      '@usenummo/db':
         specifier: workspace:*
         version: link:../../packages/db
       hono:
@@ -137,10 +137,10 @@ importers:
         specifier: ^4.6.7
         version: 4.6.7
     devDependencies:
-      '@nummo/config':
+      '@usenummo/config':
         specifier: workspace:*
         version: link:../../packages/config
-      '@nummo/sdk':
+      '@usenummo/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
 
@@ -149,10 +149,10 @@ importers:
       '@hono/node-server':
         specifier: ^2.1.9
         version: 2.1.9(hono@4.13.19)
-      '@nummo/config':
+      '@usenummo/config':
         specifier: workspace:*
         version: link:../../packages/config
-      '@nummo/sdk':
+      '@usenummo/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
       hono:
@@ -161,7 +161,7 @@ importers:
 
   packages/config:
     dependencies:
-      '@nummo/core':
+      '@usenummo/core':
         specifier: workspace:*
         version: link:../core
       zod:
@@ -172,10 +172,10 @@ importers:
 
   packages/db:
     dependencies:
-      '@nummo/config':
+      '@usenummo/config':
         specifier: workspace:*
         version: link:../config
-      '@nummo/core':
+      '@usenummo/core':
         specifier: workspace:*
         version: link:../core
       drizzle-orm:

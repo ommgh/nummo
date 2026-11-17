@@ -22,7 +22,7 @@ import {
   poolsFor,
   qty,
   sumQty,
-} from "@nummo/core";
+} from "@usenummo/core";
 import type { Db, Scope } from "./client.ts";
 import { NummoError } from "./errors.ts";
 import { newId } from "./ids.ts";

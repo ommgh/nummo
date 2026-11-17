@@ -8,7 +8,7 @@ Pricing lives in one file in the merchant's repository and is applied with the C
 
 ```ts
 // nummo.config.ts
-import { defineConfig, feature, plan, usdc } from "@nummo/config";
+import { defineConfig, feature, plan, usdc } from "@usenummo/config";
 
 export const sso = feature({ id: "sso", type: "boolean" });
 
@@ -79,7 +79,7 @@ Publishing a plan on-chain needs the merchant's wallet, so it is a separate step
 ## SDK
 
 ```ts
-import { Nummo } from "@nummo/sdk";
+import { Nummo } from "@usenummo/sdk";
 
 const nummo = new Nummo({ secretKey: process.env.NUMMO_SECRET_KEY });
 ```

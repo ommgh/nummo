@@ -1,5 +1,5 @@
 // Create an org with a test API key. Usage: node apps/api/src/bootstrap.ts "Acme AI"
-import { createApiKey, createDb, createOrg, runMigrations } from "@nummo/db";
+import { createApiKey, createDb, createOrg, runMigrations } from "@usenummo/db";
 
 const name = process.argv[2] ?? "Local merchant";
 const { db, close } = createDb();

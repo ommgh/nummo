@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { defineConfig, feature, plan, toDocument, usdc } from "@nummo/config";
+import { defineConfig, feature, plan, toDocument, usdc } from "@usenummo/config";
 import { applyConfig, createDb, createOrg, runMigrations, type Db, type Scope } from "../src/index.ts";
 
 let shared: ReturnType<typeof createDb> | null = null;

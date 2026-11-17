@@ -1,5 +1,5 @@
 import { serve } from "@hono/node-server";
-import { createDb, runMigrations } from "@nummo/db";
+import { createDb, runMigrations } from "@usenummo/db";
 import { createApp } from "./app.ts";
 
 const { db } = createDb();

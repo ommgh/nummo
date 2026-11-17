@@ -1,5 +1,5 @@
 {
-  "name": "nummo",
+  "name": "nummo-monorepo",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
@@ -14,9 +14,9 @@
     "test:db": "vitest run --project db",
     "db:up": "docker compose up -d --wait postgres",
     "db:down": "docker compose down",
-    "db:generate": "pnpm --filter @nummo/db generate",
-    "db:migrate": "pnpm --filter @nummo/db migrate",
-    "dev:api": "pnpm --filter @nummo/api dev"
+    "db:generate": "pnpm --filter @usenummo/db generate",
+    "db:migrate": "pnpm --filter @usenummo/db migrate",
+    "dev:api": "pnpm --filter @usenummo/api dev"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

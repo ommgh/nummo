@@ -3,7 +3,7 @@
  */
 
 import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
-import { formatBaseUnits, formatQty, isActive, periodAt, poolBalance, qty } from "@nummo/core";
+import { formatBaseUnits, formatQty, isActive, periodAt, poolBalance, qty } from "@usenummo/core";
 import type { Db, Scope } from "./client.ts";
 import { findPlanVersion } from "./catalog.ts";
 import { NummoError } from "./errors.ts";

@@ -259,7 +259,7 @@ export class Nummo {
   };
 
   readonly config = {
-    /** Apply a config document (from @nummo/config's toDocument). */
+    /** Apply a config document (from @usenummo/config's toDocument). */
     push: (doc: unknown, opts: { dryRun?: boolean } = {}) =>
       this.request<{ changes: { kind: string; id: string; action: string }[]; dryRun: boolean }>(
         "PUT",

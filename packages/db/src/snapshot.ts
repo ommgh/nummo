@@ -14,7 +14,7 @@ import {
   formatQty,
   qty,
   reconcileGrants,
-} from "@nummo/core";
+} from "@usenummo/core";
 import type { Scope, Tx } from "./client.ts";
 import { loadCatalog, findDefaultPlanVersion } from "./catalog.ts";
 import { NummoError } from "./errors.ts";

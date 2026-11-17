@@ -22,7 +22,7 @@ import {
   upsertCustomer,
   type Db,
   type Scope,
-} from "@nummo/db";
+} from "@usenummo/db";
 
 const decimal = z.string().regex(/^\d+(\.\d{1,9})?$/, "a non-negative decimal string with up to 9 places");
 const id = z.string().min(1).max(255);

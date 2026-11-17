@@ -1,5 +1,5 @@
 {
-  "name": "@nummo/config",
+  "name": "@usenummo/config",
   "version": "0.0.0",
   "license": "Apache-2.0",
   "private": true,
@@ -9,7 +9,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@nummo/core": "workspace:*",
+    "@usenummo/core": "workspace:*",
     "zod": "^4.6.7"
   }
 }

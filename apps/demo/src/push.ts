@@ -1,6 +1,6 @@
 // Stand-in for `nummo push` until the CLI lands: shows the diff, then applies.
-import { toDocument } from "@nummo/config";
-import { Nummo } from "@nummo/sdk";
+import { toDocument } from "@usenummo/config";
+import { Nummo } from "@usenummo/sdk";
 import config from "../nummo.config.ts";
 
 const nummo = new Nummo();

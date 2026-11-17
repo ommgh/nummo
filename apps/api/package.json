@@ -1,5 +1,5 @@
 {
-  "name": "@nummo/api",
+  "name": "@usenummo/api",
   "version": "0.0.0",
   "license": "Apache-2.0",
   "private": true,
@@ -13,13 +13,13 @@
     "bootstrap": "node --env-file-if-exists=../../.env src/bootstrap.ts"
   },
   "dependencies": {
-    "@nummo/db": "workspace:*",
+    "@usenummo/db": "workspace:*",
     "@hono/node-server": "^2.1.9",
     "hono": "^4.13.19",
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@nummo/config": "workspace:*",
-    "@nummo/sdk": "workspace:*"
+    "@usenummo/config": "workspace:*",
+    "@usenummo/sdk": "workspace:*"
   }
 }

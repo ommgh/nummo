@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { sql } from "drizzle-orm";
-import { toDocument, usdc } from "@nummo/config";
+import { toDocument, usdc } from "@usenummo/config";
 import {
   applyConfig,
   attach,

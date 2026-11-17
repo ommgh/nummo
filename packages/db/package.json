@@ -1,5 +1,5 @@
 {
-  "name": "@nummo/db",
+  "name": "@usenummo/db",
   "version": "0.0.0",
   "license": "Apache-2.0",
   "private": true,
@@ -13,8 +13,8 @@
     "migrate": "node src/migrate.ts"
   },
   "dependencies": {
-    "@nummo/config": "workspace:*",
-    "@nummo/core": "workspace:*",
+    "@usenummo/config": "workspace:*",
+    "@usenummo/core": "workspace:*",
     "drizzle-orm": "^0.45.4",
     "pg": "^8.23.1"
   },
