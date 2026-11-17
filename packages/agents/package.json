@@ -1,0 +1,17 @@
+{
+  "name": "@usenummo/agents",
+  "version": "0.0.0",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "description": "Agent payments (milestone M4): x402 and MPP over Solana's pay-kit, recorded in the nummo ledger.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@solana/pay-kit": "0.13.1",
+    "@usenummo/core": "workspace:*",
+    "@usenummo/db": "workspace:*",
+    "mppx": "^0.20.1"
+  }
+}

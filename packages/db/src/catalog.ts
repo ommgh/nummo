@@ -186,14 +186,22 @@ export async function applyConfig(db: Db, scope: Scope, raw: unknown, opts: { dr
 
       // Top-up prices and the wallet that receives one-off payments.
       const [prevSettings] = await tx.select().from(envSettings).where(and(eq(envSettings.orgId, scope.orgId), eq(envSettings.env, scope.env)));
-      const sameSettings = prevSettings && prevSettings.payTo === doc.payTo && canonical(prevSettings.topUps) === canonical(doc.topUps);
-      if (prevSettings || doc.payTo !== null || doc.topUps.length > 0) {
-        changes.push({ kind: "settings", id: "topUps, payTo", action: !prevSettings ? "create" : sameSettings ? "unchanged" : "update" });
+      const settings = { payTo: doc.payTo, topUps: doc.topUps, payPerUse: doc.payPerUse, models: doc.models };
+      const sameSettings =
+        prevSettings &&
+        canonical({ payTo: prevSettings.payTo, topUps: prevSettings.topUps, payPerUse: prevSettings.payPerUse, models: prevSettings.models }) ===
+          canonical(settings);
+      if (prevSettings || doc.payTo !== null || doc.topUps.length > 0 || doc.payPerUse.length > 0 || doc.models.length > 0) {
+        changes.push({
+          kind: "settings",
+          id: "topUps, payPerUse, models, payTo",
+          action: !prevSettings ? "create" : sameSettings ? "unchanged" : "update",
+        });
       }
       await tx
         .insert(envSettings)
-        .values({ ...scope, payTo: doc.payTo, topUps: doc.topUps })
-        .onConflictDoUpdate({ target: [envSettings.orgId, envSettings.env], set: { payTo: doc.payTo, topUps: doc.topUps, updatedAt: new Date() } });
+        .values({ ...scope, ...settings })
+        .onConflictDoUpdate({ target: [envSettings.orgId, envSettings.env], set: { ...settings, updatedAt: new Date() } });
 
       if (opts.dryRun) throw DRY;
     });

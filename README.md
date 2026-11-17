@@ -2,7 +2,7 @@
 
 Open-source usage billing and entitlements, settled in stablecoins on Solana. Plans, credit balances and a usage ledger with `check` and `track`, collecting USDC through Solana's native Subscriptions program. Customers sign once at checkout and need no SOL; the program enforces the most they can ever be charged per period.
 
-**Status:** milestones M1 (ledger core), M2 (settlement on devnet) and M3 (product surface) are built and pass their devnet scenarios: subscriptions, renewals, overage, failed payments, upgrades with proration, scheduled downgrades, one-off and automatic top-ups, a customer portal and a merchant dashboard. Not yet run on mainnet. Results are in [docs/05-roadmap-and-grant.md](docs/05-roadmap-and-grant.md#m3-results-2026-11-17).
+**Status:** milestones M1 (ledger core), M2 (settlement on devnet), M3 (product surface) and M4 (agent payments and per-model token pricing) are built and pass their devnet scenarios: subscriptions, renewals, overage, failed payments, upgrades with proration, scheduled downgrades, one-off and automatic top-ups, a customer portal, a merchant dashboard, agents paying per request over x402 and MPP, and AI model calls charged per token. Not yet run on mainnet. Results are in [docs/05-roadmap-and-grant.md](docs/05-roadmap-and-grant.md#m4-results-2026-11-18).
 
 **Start here:** the [quickstart](docs/guide/quickstart.md) charges a devnet wallet in under 30 minutes. The rest of the [guide](docs/guide/README.md) covers the pricing config, billing flows, and self-hosting on mainnet. The design is in [docs/](docs/README.md).
 
@@ -42,17 +42,18 @@ Settlement needs a puller wallet in `NUMMO_TEST_PULLER_KEY` (see [.env.example](
 | Path | What |
 | --- | --- |
 | `packages/core` | Pure rules: exact quantities (bigint, 10^-9), money in base units, periods, deduction order, credit systems, overage and caps, proration. No I/O. |
-| `packages/config` | `feature()`, `plan()`, `defineConfig()`, validation, top-ups, and the on-chain terms each paid plan version needs. |
+| `packages/config` | `feature()`, `plan()`, `defineConfig()`, validation, top-ups, pay-per-use prices, per-model token pricing, and the on-chain terms each paid plan version needs. |
 | `packages/db` | Drizzle schema and migrations, the hot path (every operation runs in one transaction holding the customer's row lock), subscription transitions, plan changes, top-ups, dashboard reports. |
 | `packages/solana` | The `Chain` interface: read plans, records and authorities; build the activation, plan change, cancel, resume, top-up transfer and plan creation; prepare, send and confirm pulls. `SolanaChain` over `@solana/kit`, and `FakeChain`, an in-memory stand-in that follows the program's rules, for tests. |
 | `packages/settlement` | Checkout, the settlement worker (renewals, overage, refills, safe resend), the failed-payment state machine, the reconciler, `verify`, the webhook dispatcher, and the customer portal. |
-| `packages/sdk` | TypeScript client. Fails open; queued `track` calls carry idempotency keys so a resend never double counts. `verifyWebhook` for receivers. |
+| `packages/agents` | Agent payments: Solana's `@solana/pay-kit` (x402 and MPP) in the API process, the puller as fee payer, a Postgres replay store, and recording paid requests in the ledger. |
+| `packages/sdk` | TypeScript client. Fails open; queued `track` calls carry idempotency keys so a resend never double counts. `paywall` for agents (Hono middleware or fetch wrapper), `trackTokens` and `checkTokens` for model calls, `verifyWebhook` for receivers. |
 | `packages/cli` | `nummo login`, `init`, `push`, `plans`, `plans publish`, `wallet`, `customers`, `preview`, `attach`, `portal`, `verify`. Run with `pnpm nummo`. |
 | `apps/api` | Hono HTTP API (`/v1/...`), the hosted checkout (`/checkout/:id`), customer portal (`/portal/:id`), the dashboard's JSON API (`/dashboard/api`), accounts with Better Auth (`/api/auth`), and the built web app. |
 | `apps/web` | The website (`/`) and merchant dashboard (`/dashboard`): React, Vite, Tailwind and shadcn/ui, with efferd's dashboard blocks and React Bits effects. |
 | `apps/worker` | Runs settlement, reconciliation and webhook delivery on their own cadences. |
-| `apps/demo` | AI chat demo that gates messages on credits, upgrades through checkout, buys credits, and opens the portal. |
-| `e2e` | Scripted devnet scenarios: `devnet.ts` (M2) and `devnet-m3.ts` (M3). |
+| `apps/demo` | AI chat demo that gates messages on credits, upgrades through checkout, buys credits, and opens the portal; `/agent/chat` for agents paying per request, `/api/complete` priced per token, and `src/agent.ts`, an agent that pays. |
+| `e2e` | Scripted devnet scenarios: `devnet.ts` (M2), `devnet-m3.ts` (M3) and `devnet-m4.ts` (M4). |
 | `spikes` | Throwaway devnet experiments (S1 to S3). |
 
 ## Tests
@@ -60,12 +61,13 @@ Settlement needs a puller wallet in `NUMMO_TEST_PULLER_KEY` (see [.env.example](
 ```bash
 pnpm test:unit                 # core, config, FakeChain, settings; fast-check property tests
 FC_NUM_RUNS=5000 pnpm test:unit
-pnpm test:db                   # against Postgres (database nummo_test): hot path, concurrency, settlement, M3 flows, API
+pnpm test:db                   # against Postgres (database nummo_test): hot path, concurrency, settlement, M3 flows, API, agent payments
 pnpm typecheck
 
 node e2e/devnet.ts run         # M2 on devnet, about 2 minutes; needs the funded wallets in spikes/.keys
 node e2e/devnet.ts renewal     # after the scenario's 1-hour period ends
 node e2e/devnet-m3.ts          # M3 on devnet, about 1 minute
+node e2e/devnet-m4.ts          # M4 on devnet, about 20 seconds; needs e2e/.keys/agent.json holding devnet USDC (faucet.circle.com)
 node e2e/checkout-page.ts      # serves a live devnet checkout on :8790 for a browser test
 ```
 

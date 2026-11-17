@@ -7,14 +7,20 @@
  * signs once. "Buy credits" is a one-off top-up, "Billing" opens the hosted
  * customer portal (plan changes, receipts, cancel). Set DEMO_SKIP_PAYMENT=1 to
  * upgrade without a wallet (test only).
+ *
+ * Milestone M4 adds two routes:
+ *   POST /agent/chat    the same chat for agents: pay 0.01 USDC per premium
+ *                       message over x402 or MPP, no account needed
+ *                       (src/agent.ts is a script that does this)
+ *   POST /api/complete  a model call charged per token at the model's price
  */
 
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
-import { Nummo, NummoApiError } from "@usenummo/sdk";
+import { Nummo, NummoApiError, type PaywallGranted } from "@usenummo/sdk";
 
 const nummo = new Nummo();
-const app = new Hono();
+const app = new Hono<{ Variables: { nummo: PaywallGranted } }>();
 
 app.get("/", (c) => c.html(PAGE));
 
@@ -27,6 +33,37 @@ app.post("/api/chat", async (c) => {
   }
   const reply = premium ? `(premium model) You said ${message.length} characters. Thoughtful!` : `(basic model) Echo: ${message}`;
   return c.json({ allowed: true, reply, failedOpen: gate.failedOpen ?? false });
+});
+
+// Agents: a signed-in user (x-user) with credits is served from them; anyone else is
+// answered with a 402 offering x402 and MPP, and served once they pay.
+const agentGate = nummo.paywall({
+  featureId: "premium_message",
+  identify: (req) => req.headers.get("x-user"),
+  description: "One premium chat message",
+});
+app.post("/agent/chat", agentGate.hono(), async (c) => {
+  const { message = "" } = await c.req.json<{ message?: string }>().catch(() => ({ message: "" }));
+  const grant = c.get("nummo");
+  return c.json({
+    reply: `(premium model) You said ${message.length} characters. Thoughtful!`,
+    customerId: grant.customerId,
+    paid: grant.paid,
+  });
+});
+
+// A model call charged per token. The model is faked: tokens are estimated from the text.
+app.post("/api/complete", async (c) => {
+  const { userId, model = "claude-haiku-5-5", prompt = "" } = await c.req.json<{ userId: string; model?: string; prompt?: string }>();
+  const input = Math.max(1, Math.ceil(prompt.length / 4));
+  const maxOutput = 400;
+  const gate = await nummo.checkTokens({ customerId: userId, model, usage: { input, output: maxOutput } });
+  if (!gate.allowed) return c.json({ allowed: false, reason: "Not enough credits for this model call." }, 402);
+  const completion = `(${model}) ${prompt.split(" ").reverse().join(" ")}`;
+  const output = Math.ceil(completion.length / 4);
+  const tracked = await nummo.trackTokens({ customerId: userId, model, usage: { input, output } });
+  const credits = tracked.events.reduce((sum, e) => sum + e.deducted.reduce((s, d) => s + Number(d.amount), 0), 0);
+  return c.json({ allowed: true, completion, usage: { input, output }, credits });
 });
 
 app.get("/api/me/:userId", async (c) => {

@@ -10,9 +10,11 @@
     "dev": "node --env-file-if-exists=../../.env --watch src/server.ts"
   },
   "dependencies": {
+    "@hono/node-server": "^2.1.9",
+    "@solana/kit": "^6.10.0",
+    "@solana/pay-kit": "0.13.1",
     "@usenummo/config": "workspace:*",
     "@usenummo/sdk": "workspace:*",
-    "@hono/node-server": "^2.1.9",
     "hono": "^4.13.19"
   }
 }

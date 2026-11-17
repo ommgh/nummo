@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useApi } from "@/hooks/use-api";
 import type { CustomerRow } from "@/lib/types";
-import { date } from "@/lib/format";
+import { date, isWalletCustomer } from "@/lib/format";
 import { EmptyNote, ErrorNote, LoadingRows, PageHeader, Panel, StatusBadge } from "@/dashboard/ui";
 
 const PAGE = 50;
@@ -78,7 +78,12 @@ export function CustomersPage() {
                     <TableCell className="text-muted-foreground">{c.email}</TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-1.5">
-                        {c.plans.length === 0 && <span className="text-muted-foreground text-xs">none</span>}
+                        {c.plans.length === 0 &&
+                          (isWalletCustomer(c.id) ? (
+                            <span className="inline-flex items-center border border-sol-purple/50 px-1.5 py-0.5 text-sol-purple text-xs">Agent · pays per request</span>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">none</span>
+                          ))}
                         {c.plans.map((p) => (
                           <span className="inline-flex items-center gap-1.5 border px-1.5 py-0.5 text-xs" key={`${p.planId}-${p.version}`}>
                             {p.name}

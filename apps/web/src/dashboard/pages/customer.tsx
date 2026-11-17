@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useApi } from "@/hooks/use-api";
 import { api } from "@/lib/api";
 import type { Customer, UsageEvent } from "@/lib/types";
-import { dateTime, num, usdc } from "@/lib/format";
+import { dateTime, num, paymentKind, usdc } from "@/lib/format";
 import { AddressLink, EmptyNote, ErrorNote, LoadingRows, PageHeader, Panel, StatusBadge, TxLink } from "@/dashboard/ui";
 import { useSession } from "@/dashboard/session";
 
@@ -163,7 +163,7 @@ export function CustomerPage() {
                     {c.invoices.map((inv) => (
                       <TableRow className="h-12" key={inv.id}>
                         <TableCell className="ps-5 text-muted-foreground">{dateTime(inv.createdAt)}</TableCell>
-                        <TableCell className="capitalize">{inv.kind}</TableCell>
+                        <TableCell>{paymentKind(inv.kind)}</TableCell>
                         <TableCell className="max-w-72 whitespace-normal text-muted-foreground text-xs">
                           {inv.lines.map((l) => `${l.kind}${l.featureId ? ` ${l.featureId}` : ""}${l.quantity ? ` ×${num(l.quantity)}` : ""}: ${usdc(l.amount)}`).join("; ")}
                         </TableCell>

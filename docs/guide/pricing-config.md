@@ -89,6 +89,48 @@ defineConfig({
 
 `price` buys `per` units; `min` and `max` bound one purchase (defaults 1 and 1,000 USDC). A purchase is a plain USDC transfer the customer signs, to `payTo`, or by default to the wallet that owns your most recently published plan. Purchased balance never expires and is used after plan credits.
 
+## Pay per use, for agents
+
+```ts
+defineConfig({
+  ...,
+  payPerUse: [
+    { feature: "basic_message", price: usdc("0.001") },
+    { feature: "premium_message", price: usdc("0.01"), per: 1 },
+  ],
+});
+```
+
+A caller with no plan, typically an AI agent, can pay for a metered feature per request over x402 or MPP: `price` buys `per` units, and a request for `value` units costs `value × price ÷ per`, rounded up to the next base unit. The money goes to `payTo` (or the owner of your latest published plan), like a top-up. Gate the route with `nummo.paywall` ([billing flows](billing-flows.md#agents-paying-per-request)). Only metered features can be listed: agents pay for what they use, not for a credit system.
+
+## Per-model token pricing
+
+```ts
+defineConfig({
+  features: [..., credits],            // a credit system
+  models: {
+    creditSystem: "credits",
+    creditPrice: usdc("0.01"),         // what one credit is worth: 100 credits a dollar
+    markup: "20%",                     // on top of the provider's price; 0.2 works too
+    per: 1_000_000,                    // prices are per million tokens (the default)
+    prices: {
+      "claude-sonnet-5-5": { input: usdc("3"), output: usdc("15"), cachedInput: usdc("0.3") },
+      "claude-haiku-5-5": { input: usdc("1"), output: usdc("5") },
+    },
+  },
+});
+```
+
+Each model becomes one metered feature per kind of token (`claude_sonnet_5_5_input`, `claude_sonnet_5_5_output`, `claude_sonnet_5_5_cached_input`), drawing from the credit system at
+
+```
+credits per token = price ÷ per × (1 + markup) ÷ creditPrice
+```
+
+rounded up to 9 decimal places. Sonnet input above is 3 ÷ 1,000,000 × 1.2 ÷ 0.01 = 0.00036 credits a token. Plans grant the credit system as usual, so one balance covers every model; overage, top-ups and automatic top-ups all work on it. The prices above are examples: copy your provider's current price list, and push a new config when it changes (rates are not part of the on-chain ceiling, so no new plan version is needed).
+
+Track a model call with `nummo.trackTokens` and check one up front with `nummo.checkTokens` ([billing flows](billing-flows.md#ai-model-calls)). The model name is the key: a call for a model not in `prices` is refused with `model_not_found`.
+
 ## Applying it
 
 ```bash

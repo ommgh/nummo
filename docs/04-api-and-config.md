@@ -169,6 +169,24 @@ await nummo.balances.finalize({
 
 `action: "release"` returns the whole hold. A lock that passes `expiresAt` without being finalised is released.
 
+### Per-model token pricing (M4)
+
+```ts
+await nummo.trackTokens({ customerId: "user_123", model: "claude-sonnet-5-5", usage: { input: 1200, output: 340 }, idempotencyKey: requestId });
+const { allowed } = await nummo.checkTokens({ customerId: "user_123", model: "claude-sonnet-5-5", usage: { input: 1200, output: 4000 } });
+```
+
+Models and their provider prices are in the config's `models` section; each kind of token is a metered feature drawing from a credit system at a rate derived from the price, a markup and what a credit is worth. See the [pricing config guide](guide/pricing-config.md#per-model-token-pricing).
+
+### paywall: agents pay per request (M4)
+
+```ts
+const gate = nummo.paywall({ featureId: "premium_message", identify: (req) => userIdFrom(req) });
+app.post("/agent/chat", gate.hono(), handler);
+```
+
+A signed-in customer with the balance is served from it. Anyone else gets a 402 offering x402 and MPP at the `payPerUse` price, and is served once they pay; the payment is recorded against them or against the paying wallet (`wallet:<address>`). See [billing flows](guide/billing-flows.md#agents-paying-per-request).
+
 ### Reading a customer
 
 ```ts
@@ -211,6 +229,9 @@ All endpoints take a bearer API key. Bodies are JSON. Amounts are strings of bas
 | `POST /v1/check` | Check access, optionally lock or deduct |
 | `POST /v1/track` | Record usage |
 | `POST /v1/track/batch` | Record up to 1,000 usage events |
+| `POST /v1/track/tokens` | Record a model call's tokens `{ customerId, model, usage: { input, output, cachedInput }, idempotencyKey? }` (M4) |
+| `POST /v1/check/tokens` | May this customer make this model call `{ customerId, model, usage }` (M4) |
+| `POST /v1/pay` | Behind `paywall`: `{ request: { method, url, headers }, featureId, value?, customerId? }`. Answers `allowed` (served from a balance), `payment_required` (the 402 to send as it is), or `paid` (settled and recorded, with receipt headers) (M4) |
 | `POST /v1/balances/finalize` | Confirm or release a lock |
 | `POST /v1/balances` | Grant a balance by hand |
 | `POST /v1/topups` | Start a one-off purchase `{ customerId, featureId, amount, successUrl? }`; returns a checkout URL |
@@ -249,11 +270,11 @@ Delivered as `POST` with a JSON body `{ id, type, env, createdAt, data }` and an
 | `subscription.resumed` | The customer resumed a cancelled subscription before it ended |
 | `subscription.change_scheduled` | A downgrade was scheduled for the period end (`planId`, `effectiveAt`), or cancelled (`canceled: true`) |
 | `subscription.ended` | Entitlements removed. `next` describes a scheduled plan that took over (a pending checkout if it is paid) |
-| `payment.succeeded` | Any pull or purchase confirmed; includes the transaction signature; `kind: "topup"` for a one-off purchase |
+| `payment.succeeded` | Any pull or purchase confirmed; includes the transaction signature; `kind: "topup"` for a one-off purchase, `kind: "pay_per_use"` with `protocol` and `wallet` for a request an agent paid for |
 | `payment.failed` | A pull failed; includes the reason |
 | `balance.low` | A balance crossed the configured warning threshold |
 | `balance.depleted` | A balance reached zero |
-| `invoice.finalized` | An invoice was written: `kind` is `activation`, `renewal`, `overage` or `topup` (`automatic: true` for a refill) |
+| `invoice.finalized` | An invoice was written: `kind` is `activation`, `renewal`, `overage`, `topup` (`automatic: true` for a refill) or `pay_per_use` |
 
 A merchant who uses `check` on every request does not need webhooks to gate access. They are for notifications and for copying state into the merchant's own database.
 
@@ -267,4 +288,4 @@ The example in `apps/demo` is an AI chat app with the config above:
 4. "Billing" opens the portal: the 70 USDC ceiling, usage, receipts, a prorated upgrade to Team, and cancel with the wallet.
 5. "Buy 500 credits" is a one-off top-up of 5 USDC, signed once.
 6. They empty the wallet. The next pull fails, the account goes past due, and after the grace period it falls back to free.
-7. Later milestone (M4): a script acting as an agent pays the same API per request over x402 and appears in the same dashboard.
+7. Milestone M4: a script acting as an agent (`src/agent.ts`) pays the same API per request over x402 and MPP (`POST /agent/chat`, 0.01 USDC a premium message) and appears in the same dashboard as customer `wallet:<address>`. `POST /api/complete` charges a model call per token at the model's price.

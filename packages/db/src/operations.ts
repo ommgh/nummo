@@ -219,7 +219,7 @@ function view(ctx: CustomerCtx, featureId: string) {
 
 // ------------------------------------------------------------------ track
 
-async function trackInCtx(ctx: CustomerCtx, input: Omit<TrackInput, "customerId">): Promise<TrackResult> {
+export async function trackInCtx(ctx: CustomerCtx, input: Omit<TrackInput, "customerId">): Promise<TrackResult> {
   const value = parsePositive(input.value, "value", 0n);
 
   // Rule 7: a repeated idempotency key returns the first result and changes nothing.

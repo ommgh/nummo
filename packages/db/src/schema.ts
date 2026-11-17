@@ -48,9 +48,9 @@ export const lockStatusEnum = pgEnum("lock_status", ["held", "confirmed", "relea
 export const checkoutStatusEnum = pgEnum("checkout_status", ["open", "submitted", "completed", "expired"]);
 /** subscribe: first paid plan. change: an immediate upgrade from another paid plan. topup: a one-off purchase. */
 export const checkoutKindEnum = pgEnum("checkout_kind", ["subscribe", "change", "topup"]);
-export const invoiceKindEnum = pgEnum("invoice_kind", ["activation", "renewal", "overage", "topup"]);
+export const invoiceKindEnum = pgEnum("invoice_kind", ["activation", "renewal", "overage", "topup", "pay_per_use"]);
 export const invoiceStatusEnum = pgEnum("invoice_status", ["open", "paid", "void", "uncollectible"]);
-export const invoiceLineKindEnum = pgEnum("invoice_line_kind", ["base", "overage", "writeoff", "proration", "topup"]);
+export const invoiceLineKindEnum = pgEnum("invoice_line_kind", ["base", "overage", "writeoff", "proration", "topup", "pay_per_use"]);
 export const attemptStatusEnum = pgEnum("attempt_status", ["pending", "confirmed", "failed", "expired"]);
 export const paymentStatusEnum = pgEnum("payment_status", ["confirmed", "finalized", "reverted"]);
 
@@ -490,6 +490,10 @@ export const payments = pgTable(
     signature: text("signature").notNull(),
     amount: money("amount").notNull(),
     status: paymentStatusEnum("status").notNull().default("confirmed"),
+    /** For a payment made on a request (M4): "x402" or "mpp". Null for pulls and checkouts. */
+    protocol: text("protocol"),
+    /** The wallet that paid, when known. */
+    wallet: text("wallet"),
     createdAt: ts("created_at").notNull().defaultNow(),
     finalizedAt: ts("finalized_at"),
   },
@@ -505,9 +509,27 @@ export const envSettings = pgTable(
     payTo: text("pay_to"),
     /** TopUpDoc[] from the config: which features can be bought, and at what price. */
     topUps: jsonb("top_ups").notNull().default(sql`'[]'::jsonb`),
+    /** PayPerUseDoc[]: features an agent can pay for per request over x402 or MPP (M4). */
+    payPerUse: jsonb("pay_per_use").notNull().default(sql`'[]'::jsonb`),
+    /** ModelDoc[]: which metered feature each model's tokens are tracked as (M4). */
+    models: jsonb("models").notNull().default(sql`'[]'::jsonb`),
     updatedAt: ts("updated_at").notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.orgId, t.env] })],
+);
+
+/**
+ * A small key-value store shared by every API instance: replay protection for
+ * MPP challenges and credentials (a credential may be used once).
+ */
+export const kvStore = pgTable(
+  "kv_store",
+  {
+    key: text("key").primaryKey(),
+    value: text("value").notNull(),
+    expiresAt: ts("expires_at"),
+  },
+  (t) => [index("kv_store_expires_idx").on(t.expiresAt)],
 );
 
 /**

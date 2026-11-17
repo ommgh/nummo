@@ -9,7 +9,14 @@ export function DashboardStats({ o }: { o: Overview }) {
     { label: "Customers", value: o.customers.toLocaleString(), foot: `${o.paidSubscribers} on a paid plan` },
     { label: "Paid subscribers", value: o.paidSubscribers.toLocaleString(), foot: o.pastDue ? `${o.pastDue} past due` : o.canceling ? `${o.canceling} canceling` : "none past due", bad: o.pastDue > 0 },
     { label: "Run rate, 30 days", value: usdc(o.runRate30d, { compact: true }), unit: "USDC", foot: "base fees of live plans" },
-    { label: "Collected, 30 days", value: usdc(o.collected30d, { compact: true }), unit: "USDC", foot: `${o.payments30d} payment${o.payments30d === 1 ? "" : "s"} on-chain` },
+    {
+      label: "Collected, 30 days",
+      value: usdc(o.collected30d, { compact: true }),
+      unit: "USDC",
+      foot: o.agentPayments30d?.count
+        ? `${o.payments30d} payments, ${o.agentPayments30d.count} by ${o.agentPayments30d.wallets} agent${o.agentPayments30d.wallets === 1 ? "" : "s"}`
+        : `${o.payments30d} payment${o.payments30d === 1 ? "" : "s"} on-chain`,
+    },
   ];
   return (
     <>

@@ -55,3 +55,22 @@ export function explorerAddress(address: string, network: string | undefined) {
 export function eventLabel(type: string) {
   return type.replace(/[._]/g, " ").replace(/^\w/, (c) => c.toUpperCase());
 }
+
+const KIND_LABEL: Record<string, string> = {
+  activation: "Activation",
+  renewal: "Renewal",
+  overage: "Overage",
+  topup: "Top-up",
+  pay_per_use: "Pay per use",
+};
+
+/** "Renewal", or "Pay per use · x402" for a request paid on the spot. */
+export function paymentKind(kind: string, protocol?: string | null) {
+  const label = KIND_LABEL[kind] ?? kind;
+  return protocol ? `${label} · ${protocol === "mpp" ? "MPP" : protocol}` : label;
+}
+
+/** Customers created for a wallet that paid per request, without an account (M4). */
+export function isWalletCustomer(id: string) {
+  return id.startsWith("wallet:");
+}

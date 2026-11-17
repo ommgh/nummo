@@ -132,6 +132,37 @@ Done when:
 - An agent script pays the demo API per request and shows up in the dashboard next to subscribers.
 - Two or three real projects are integrated, at least on devnet.
 
+#### M4 results (2026-11-18)
+
+Built: `payPerUse` and `models` in the pricing config (`packages/config`); paid-request recording and token tracking in the ledger (`packages/db/src/agents.ts`); `packages/agents`, which runs Solana's `@solana/pay-kit` inside the API with the puller as fee payer and a Postgres replay store; `POST /v1/pay`, `/v1/track/tokens` and `/v1/check/tokens`; `paywall` (Hono middleware, fetch wrapper, or plain `check`), `trackTokens` and `checkTokens` in the SDK; the demo's `/agent/chat` and `/api/complete` routes and the agent script `apps/demo/src/agent.ts`; agent payments in the dashboard (payment kind and protocol, "Agent" customers, agent payments on the overview); `e2e/devnet-m4.ts`.
+
+`e2e/devnet-m4.ts` passed every check on devnet in 22 seconds (2026-11-18), with real devnet USDC from Circle's faucet:
+
+| Scenario | Result |
+| --- | --- |
+| 402 | An unpaid call to the demo's `/agent/chat` got a 402 with both an x402 `exact` offer (`PAYMENT-REQUIRED`, 0.01 USDC to the merchant) and an MPP `charge` challenge (`WWW-Authenticate: Payment`). |
+| Agent pays | The agent script paid four calls, alternating x402 and MPP, from a wallet holding USDC and no SOL. Each answered 200 with a receipt header in 1.2 to 2.9 seconds; the merchant received 0.04 USDC; the puller spent 0.00004 SOL in fees. |
+| Ledger | Four paid `pay_per_use` invoices, payments tagged `x402` and `mpp` with the paying wallet, each signature a successful devnet transaction, under customer `wallet:<agent>` with no plan. |
+| Replay | A captured x402 payment and a captured MPP credential, sent again, each got a new 402; nothing was recorded twice. |
+| Next to subscribers | A signed-in user with free-plan credits was served from them with no 402; the dashboard overview counted the agent's payments and listed the agent beside the user. |
+| Tokens | A model call on `/api/complete` was charged 0.0414 credits for 15 input and 20 output tokens at Sonnet's derived rates. |
+
+Tests: 156 (unit and db), including `apps/api/test/agents.db.test.ts` (paywall through Hono with a stand-in payment gate, replays, fail-open, header filtering, token pricing) and the config tests for `payPerUse` and `models`.
+
+Done-when status:
+
+| Criterion | Status |
+| --- | --- |
+| An agent script pays the demo API per request and shows up in the dashboard next to subscribers | Done on devnet (above). |
+| Two or three real projects integrated, at least on devnet | Not started: needs design partners. |
+
+Differences from the plan, decided during the build:
+
+- **pay-kit, not the bare x402 packages.** `@solana/pay-kit` serves x402 and MPP behind one call over web `Request`s, so one middleware covers both protocols.
+- **The payment runs in the nummo API, not the merchant's app.** The puller key stays in one place and the SDK has no chain dependencies; the app forwards only payment headers.
+- **Per-model pricing compiles to the existing ledger.** Each model's token kinds become metered features with credit rates, so overage, top-ups, locks and the dashboard work unchanged.
+- **Paid requests draw on no balance.** A request paid on the spot is recorded as usage that was paid for, so it never eats the payer's plan credits.
+
 ## Testing approach
 
 | Layer | Method |

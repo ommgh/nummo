@@ -9,3 +9,8 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - '@hono/node-server@2.1.9'
   - hono@4.13.19
+
+# @solana/pay-kit (agent payments, packages/agents) runs on @solana/kit 6 (its token
+# program client uses kit 6 APIs), while @solana/subscriptions pins kit 7.
+overrides:
+  '@solana/pay-kit>@solana/kit': ^6.10.0

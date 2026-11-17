@@ -7,11 +7,14 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { z } from "zod";
+import { AgentPayments } from "@usenummo/agents";
 import {
   applyConfig,
   attach,
   NummoError,
   check,
+  checkTokens,
+  trackTokens,
   createTopUp,
   finalize,
   getCustomer,
@@ -109,6 +112,27 @@ const schemas = {
   webhook: z.object({ url: z.url() }),
   checkoutTx: z.object({ wallet: z.string().min(1).max(64) }),
   checkoutSubmit: z.object({ signedTransaction: z.string().min(1).max(4096) }),
+  pay: z.object({
+    request: z.object({
+      method: z.string().min(1).max(16),
+      url: z.url().max(4096),
+      headers: z.record(z.string(), z.string().max(16_384)).default({}),
+    }),
+    featureId: id,
+    value: decimal.optional(),
+    customerId: id.optional(),
+    idempotencyKey: id.optional(),
+    properties: props,
+    description: z.string().max(200).optional(),
+  }),
+  tokens: z.object({
+    customerId: id,
+    model: z.string().min(1).max(128),
+    usage: z.object({ input: decimal.optional(), output: decimal.optional(), cachedInput: decimal.optional() }),
+    idempotencyKey: id.optional(),
+    properties: props,
+    occurredAt: z.iso.datetime().optional(),
+  }),
 };
 
 type Vars = { Variables: { scope: Scope } };
@@ -140,6 +164,8 @@ export type AppOptions = {
   webDir?: string | null;
   /** Dashboard accounts; created from the settings when omitted. */
   auth?: Auth;
+  /** x402 and MPP payments per request. Without it, /v1/pay answers settlement_unavailable. */
+  agents?: AgentPayments;
 };
 
 export function createApp(db: Db, opts: AppOptions = {}) {
@@ -241,6 +267,23 @@ export function createApp(db: Db, opts: AppOptions = {}) {
       b.events.map((e) => ({ ...e, occurredAt: e.occurredAt ? new Date(e.occurredAt) : undefined })),
     );
     return c.json({ results });
+  });
+
+  // Agent payments (M4): serve from a balance, answer with a 402 challenge, or settle a payment.
+  const agents = opts.agents ?? new AgentPayments(db, {});
+  v1.post("/pay", async (c) => {
+    const b = await body(c, schemas.pay);
+    return c.json(await agents.pay(c.get("scope"), b));
+  });
+
+  // Per-model token pricing (M4).
+  v1.post("/track/tokens", async (c) => {
+    const b = await body(c, schemas.tokens);
+    return c.json(await trackTokens(db, c.get("scope"), { ...b, occurredAt: b.occurredAt ? new Date(b.occurredAt) : undefined }));
+  });
+  v1.post("/check/tokens", async (c) => {
+    const b = await body(c, schemas.tokens.pick({ customerId: true, model: true, usage: true }));
+    return c.json(await checkTokens(db, c.get("scope"), b));
   });
 
   v1.post("/balances/finalize", async (c) => c.json(await finalize(db, c.get("scope"), await body(c, schemas.finalize))));

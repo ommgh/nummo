@@ -21,6 +21,9 @@ export type Payment = {
   amount: string;
   signature: string;
   status: string;
+  /** "x402" or "mpp" for a request paid on the spot (M4). */
+  protocol: string | null;
+  wallet: string | null;
   createdAt: string;
 };
 
@@ -47,6 +50,7 @@ export type Overview = {
   webhooks: { pending: number; failing: number; dead: number };
   webhookEndpoint: string | null;
   recentPayments: Payment[];
+  agentPayments30d: { amount: string; count: number; wallets: number };
   activity: { type: string; createdAt: string; state: string; payload: unknown }[];
   usageDaily: UsageDaily;
 };

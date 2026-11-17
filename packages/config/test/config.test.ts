@@ -1,5 +1,17 @@
 import { describe, expect, test } from "vitest";
-import { ConfigError, defineConfig, feature, onchainTerms, plan, toDocument, usdc, validateDocument } from "../src/index.ts";
+import {
+  ConfigError,
+  creditsPerToken,
+  defineConfig,
+  feature,
+  modelSlug,
+  onchainTerms,
+  parseMarkup,
+  plan,
+  toDocument,
+  usdc,
+  validateDocument,
+} from "../src/index.ts";
 
 // The example from docs/04-api-and-config.md, verbatim.
 const sso = feature({ id: "sso", type: "boolean" });
@@ -123,5 +135,85 @@ describe("pricing config", () => {
     delete doc.payTo;
     for (const p of doc.plans) for (const i of p.items) delete i.autoTopUp;
     expect(validateDocument(doc)).toEqual(toDocument(example));
+  });
+});
+
+describe("pay per use and model pricing (M4)", () => {
+  const withModels = defineConfig({
+    ...example,
+    payPerUse: [{ feature: premiumMessage.id, price: usdc("0.01") }],
+    models: {
+      creditSystem: credits.id,
+      creditPrice: usdc("0.01"),
+      markup: "20%",
+      prices: {
+        "claude-opus-5-5": { input: usdc("5"), output: usdc("25"), cachedInput: usdc("0.5") },
+        "gpt-mini": { input: usdc("0.05"), output: usdc("0.4") },
+      },
+    },
+  });
+
+  test("models become metered features with credit rates from price, markup and credit price", () => {
+    const doc = toDocument(withModels);
+    const cs = doc.features.find((f) => f.id === "credits");
+    if (cs?.type !== "credit_system") throw new Error("credit system missing");
+    const rate = (f: string) => cs.rates.find((r) => r.feature === f)?.credits;
+    // 5 USDC per 1M tokens = 0.000005 per token; * 1.2 = 0.000006; / 0.01 per credit = 0.0006 credits.
+    expect(rate("claude_opus_5_5_input")).toBe("0.0006");
+    expect(rate("claude_opus_5_5_output")).toBe("0.003");
+    expect(rate("claude_opus_5_5_cached_input")).toBe("0.00006");
+    expect(rate("gpt_mini_input")).toBe("0.000006");
+    // The hand-written rates are kept.
+    expect(rate("basic_message")).toBe("1");
+    expect(doc.features.find((f) => f.id === "gpt_mini_output")).toMatchObject({ type: "metered", name: "gpt-mini output tokens" });
+    expect(doc.models).toEqual([
+      {
+        id: "claude-opus-5-5",
+        creditSystem: "credits",
+        features: { input: "claude_opus_5_5_input", output: "claude_opus_5_5_output", cachedInput: "claude_opus_5_5_cached_input" },
+      },
+      { id: "gpt-mini", creditSystem: "credits", features: { input: "gpt_mini_input", output: "gpt_mini_output" } },
+    ]);
+    expect(doc.payPerUse).toEqual([{ feature: "premium_message", price: "10000", per: "1" }]);
+    // The server re-validates the same document.
+    expect(validateDocument(JSON.parse(JSON.stringify(doc)))).toEqual(doc);
+  });
+
+  test("rates round up to 9 places", () => {
+    expect(creditsPerToken(1n, { creditPrice: usdc("1"), per: 3 })).toBe("0.000000334");
+    expect(creditsPerToken(usdc("3"), { creditPrice: usdc("0.001"), markup: 0 })).toBe("0.003");
+    expect(parseMarkup("12.5%")).toBe(125_000_000n);
+  });
+
+  test("model names become feature ids", () => {
+    expect(modelSlug("claude-fable-5-2")).toBe("claude_fable_5_2");
+    expect(modelSlug("GPT-5.1 (mini)")).toBe("gpt_5_1_mini");
+    expect(modelSlug("4o")).toBe("m_4o");
+  });
+
+  test("bad pay-per-use and model entries are reported", () => {
+    const doc = toDocument(withModels);
+    const bad = {
+      ...doc,
+      payPerUse: [
+        { feature: "credits", price: "1", per: "1" },
+        { feature: "nope", price: "0", per: "1" },
+      ],
+      models: [{ id: "x", creditSystem: "sso", features: { input: "basic_message", output: "nope" } }],
+    };
+    expect(() => validateDocument(bad)).toThrow(ConfigError);
+    try {
+      validateDocument(bad);
+    } catch (e) {
+      const issues = (e as ConfigError).issues.join("\n");
+      expect(issues).toContain("payPerUse for credits: must be a metered feature");
+      expect(issues).toContain("payPerUse for nope: unknown feature");
+      expect(issues).toContain("price must be greater than 0");
+      expect(issues).toContain("model x: sso is not a credit system");
+      expect(issues).toContain("model x: output feature nope must be a declared metered feature");
+    }
+    expect(() =>
+      toDocument({ ...withModels, models: { ...withModels.models!, prices: { free: { input: 0n, output: 1n } } } }),
+    ).toThrow(/input price must be greater than 0/);
   });
 });

@@ -198,7 +198,7 @@ Under D3 a compromised puller key cannot redirect funds. Under the fallback desi
 
 A plan allows the owner plus up to four listed pullers (`MAX_PLAN_PULLERS`, confirmed in the program source). The merchant's main wallet should own the plan and receive funds, and a separate hot wallet should be the puller.
 
-## Agent payments: x402 and MPP (milestone M4)
+## Agent payments: x402 and MPP (milestone M4, built)
 
 Both protocols return `402 Payment Required` with a price, and the client retries with a payment ([Solana guide](https://solana.com/docs/payments/agentic-payments)).
 
@@ -216,6 +216,19 @@ What we add is a thin middleware around these libraries:
 3. When a payment succeeds, record it as a payment and a usage event against a customer keyed by the paying wallet.
 
 That way a merchant sees subscribers and pay-per-call agents in one ledger and one dashboard. We do not run a facilitator.
+
+### How M4 implements this
+
+| Topic | What the code does |
+| --- | --- |
+| Library | Solana's `@solana/pay-kit` (0.13), which wraps the x402 SVM schemes and mppx behind one `requirePayment(Request, gate)`. It runs inside the nummo API (`packages/agents`), where the puller key already lives; the merchant's app forwards only the payment headers through `POST /v1/pay`. |
+| Offers | Every 402 offers x402 `exact` and MPP `charge` (pull mode), in USDC, to the merchant's `payTo`. The puller is the operator and fee payer, so agents hold no SOL. |
+| Replay | MPP credentials are claimed in a Postgres key-value table (`kv_store`) with an advisory lock per key, so a credential is accepted once across API instances. An x402 transaction cannot land twice, and `payments.signature` is unique. Both replays were refused on devnet. |
+| Payer | pay-kit reports the payer for x402 but not for MPP; we read the transfer's authority from the confirmed transaction. |
+| Recording | One customer transaction writes a `pay_per_use` invoice and line, a payment (with `protocol` and `wallet`), a usage event that draws on no balance, and the webhooks. A payment that settled but failed to record is logged and the caller is still served. |
+| Dependency note | pay-kit needs `@solana/kit` 6 and the Subscriptions SDK kit 7; `pnpm-workspace.yaml` pins pay-kit's subtree to kit 6. |
+
+Not done: `upto` and MPP `session` (metered payment channels), MPP `push` mode, and agents with a prepaid balance identified by wallet signature.
 
 ## Tokens and networks
 

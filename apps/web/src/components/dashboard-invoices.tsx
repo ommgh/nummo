@@ -5,7 +5,7 @@ import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, Tabl
 import { DashboardCard } from "@/components/dashboard-card";
 import { ArrowRightIcon, CoinsIcon } from "@phosphor-icons/react";
 import type { Payment } from "@/lib/types";
-import { ago, usdc } from "@/lib/format";
+import { ago, paymentKind, usdc } from "@/lib/format";
 import { EmptyNote, StatusBadge } from "@/dashboard/ui";
 
 export function RecentPayments({ payments }: { payments: Payment[] }) {
@@ -40,7 +40,7 @@ export function RecentPayments({ payments }: { payments: Payment[] }) {
                     </Link>
                     <div className="text-[11px] text-muted-foreground">{ago(p.createdAt)}</div>
                   </TableCell>
-                  <TableCell className="text-muted-foreground capitalize">{p.kind}</TableCell>
+                  <TableCell className="text-muted-foreground">{paymentKind(p.kind, p.protocol)}</TableCell>
                   <TableCell>
                     <StatusBadge status={p.status} />
                   </TableCell>

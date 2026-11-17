@@ -11,3 +11,5 @@ export * from "./auth.ts";
 export { runMigrations, MIGRATIONS_FOLDER } from "./migrate.ts";
 export * as schema from "./schema.ts";
 export * from "./reports.ts";
+export * from "./agents.ts";
+export * from "./kv.ts";

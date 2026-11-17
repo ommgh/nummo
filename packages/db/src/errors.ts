@@ -17,6 +17,8 @@ export type ErrorCode =
   | "activation_rejected"
   | "plan_change_blocked"
   | "topup_not_available"
+  | "pay_per_use_not_available"
+  | "model_not_found"
   | "portal_not_found"
   | "wrong_wallet"
   | "settlement_unavailable"
@@ -45,6 +47,8 @@ const STATUS: Record<ErrorCode, number> = {
   activation_rejected: 400,
   plan_change_blocked: 409,
   topup_not_available: 400,
+  pay_per_use_not_available: 400,
+  model_not_found: 404,
   portal_not_found: 404,
   wrong_wallet: 400,
   settlement_unavailable: 503,

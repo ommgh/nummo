@@ -51,7 +51,9 @@ Expect about 5 to 10 USD a month on the Hobby plan: three small always-on proces
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | — | Offer "Continue with Google". Callback URL: `<NUMMO_PUBLIC_URL>/api/auth/callback/google`. |
 | `NUMMO_TRUSTED_ORIGINS` | — | Extra origins (comma-separated) allowed to call `/api/auth`, for a dashboard served from another domain. |
 | `NUMMO_PUBLIC_URL` | `http://localhost:8787` | Public base URL: checkout, portal and plan metadata links. Use `https://` in production; the dashboard cookie is then marked Secure. |
-| `NUMMO_TEST_PULLER_KEY`, `NUMMO_LIVE_PULLER_KEY` | — | Puller keypair (file path or JSON byte array) per environment. Without one, that environment's settlement is off. |
+| `NUMMO_TEST_PULLER_KEY`, `NUMMO_LIVE_PULLER_KEY` | — | Puller keypair (file path or JSON byte array) per environment. Without one, that environment's settlement and agent payments are off. The puller also pays the network fee of each x402 and MPP payment (about 0.00001 SOL). |
+| `NUMMO_MPP_SECRET` | derived from the puller key | Binds MPP challenges to their contents. Set it explicitly if you rotate the puller key. |
+| `NUMMO_MPP_REALM` | `nummo` | The realm in MPP challenges. |
 | `NUMMO_TEST_RPC_URL`, `NUMMO_LIVE_RPC_URL` | public cluster | RPC endpoint. Use a provider's on mainnet. |
 | `NUMMO_TEST_MINT`, `NUMMO_LIVE_MINT` | USDC | Token mint. Mainnet refuses anything but USDC unless `NUMMO_LIVE_ALLOW_MINT` names it too. |
 | `NUMMO_TEST_PRIORITY_FEE`, `NUMMO_LIVE_PRIORITY_FEE` | 0, 10000 | Micro-lamports per compute unit. |

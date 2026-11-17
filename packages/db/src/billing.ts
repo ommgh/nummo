@@ -25,7 +25,7 @@ import {
   qty,
   topUpQuantity,
 } from "@usenummo/core";
-import type { TopUpDoc } from "@usenummo/config";
+import type { ModelDoc, PayPerUseDoc, TopUpDoc } from "@usenummo/config";
 import type { Db, Scope } from "./client.ts";
 import { findPlanVersion } from "./catalog.ts";
 import { NummoError } from "./errors.ts";
@@ -324,7 +324,12 @@ export async function preview(db: Db, scope: Scope, input: { customerId: string;
 
 export async function loadEnvSettings(db: Db, scope: Scope) {
   const [row] = await db.select().from(envSettings).where(and(eq(envSettings.orgId, scope.orgId), eq(envSettings.env, scope.env)));
-  return { payTo: row?.payTo ?? null, topUps: (row?.topUps ?? []) as TopUpDoc[] };
+  return {
+    payTo: row?.payTo ?? null,
+    topUps: (row?.topUps ?? []) as TopUpDoc[],
+    payPerUse: (row?.payPerUse ?? []) as PayPerUseDoc[],
+    models: (row?.models ?? []) as ModelDoc[],
+  };
 }
 
 /** The wallet one-off payments go to: `payTo` from the config, else the owner of the latest published plan. */

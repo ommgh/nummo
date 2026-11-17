@@ -15,7 +15,7 @@ const inScope = (t: any, scope: Scope) => and(eq(t.orgId, scope.orgId), eq(t.env
 
 export async function overview(db: Db, scope: Scope, now = new Date()) {
   const since = new Date(now.getTime() - 30 * DAY);
-  const [[c], live, [collected], daily, usage, [webhooks], recent] = await Promise.all([
+  const [[c], live, [collected], daily, usage, [webhooks], recent, [agents]] = await Promise.all([
     db.select({ n: sql<number>`count(*)::int` }).from(customers).where(inScope(customers, scope)),
     db
       .select({ status: subscriptions.status, base: planVersions.baseAmount, hours: planVersions.periodHours })
@@ -53,6 +53,15 @@ export async function overview(db: Db, scope: Scope, now = new Date()) {
       .from(outbox)
       .where(and(inScope(outbox, scope), gt(outbox.createdAt, since))),
     listPayments(db, scope, { limit: 8 }),
+    // Requests paid on the spot over x402 or MPP (M4), and how many wallets paid them.
+    db
+      .select({
+        v: sql<string>`coalesce(sum(${payments.amount}), 0)::text`,
+        n: sql<number>`count(*)::int`,
+        wallets: sql<number>`count(distinct ${payments.wallet})::int`,
+      })
+      .from(payments)
+      .where(and(inScope(payments, scope), sql`${payments.protocol} is not null`, sql`${payments.status} <> 'reverted'`, gt(payments.createdAt, since))),
   ]);
 
   // A 30-day run rate: each live paid plan's base fee scaled to 720 hours. Periods are hours, not months.
@@ -76,6 +85,7 @@ export async function overview(db: Db, scope: Scope, now = new Date()) {
     webhooks: webhooks!,
     webhookEndpoint: (await db.select({ url: webhookEndpoints.url }).from(webhookEndpoints).where(and(inScope(webhookEndpoints, scope), isNull(webhookEndpoints.disabledAt))))[0]?.url ?? null,
     recentPayments: recent,
+    agentPayments30d: { amount: formatBaseUnits(BigInt(agents!.v)), count: agents!.n, wallets: agents!.wallets },
   };
 }
 
@@ -96,6 +106,8 @@ export async function listPayments(db: Db, scope: Scope, q: { limit?: number; cu
     amount: formatBaseUnits(p.amount),
     signature: p.signature,
     status: p.status,
+    protocol: p.protocol,
+    wallet: p.wallet,
     createdAt: p.createdAt.toISOString(),
   }));
 }

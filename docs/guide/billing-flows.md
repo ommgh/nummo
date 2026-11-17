@@ -16,6 +16,47 @@ if (!allowed) return upgradePrompt();
 
 `check` with `sendEvent: true` checks and records usage in one call. Use `check` then `track` when the cost is known only afterwards, or a lock (`check` with `lock`, then `balances.finalize`) when it must be reserved first. The SDK fails open if the API is unreachable and resends queued usage exactly once.
 
+## AI model calls
+
+```ts
+const ok = await nummo.checkTokens({ customerId, model: "claude-sonnet-5-5", usage: { input: promptTokens, output: maxTokens } });
+if (!ok.allowed) return upgradePrompt();
+const res = await callModel();
+await nummo.trackTokens({
+  customerId,
+  model: "claude-sonnet-5-5",
+  usage: { input: res.usage.input_tokens, output: res.usage.output_tokens, cachedInput: res.usage.cache_read_input_tokens },
+  idempotencyKey: res.id,
+});
+```
+
+`trackTokens` records one usage event per kind of token at the model's credit rate ([pricing config](pricing-config.md#per-model-token-pricing)), in one transaction; an idempotency key covers all of them. `checkTokens` converts the whole call into one requirement against the shared balance.
+
+## Agents paying per request
+
+```ts
+const gate = nummo.paywall({
+  featureId: "premium_message",
+  identify: (req) => sessionUserId(req),   // your signed-in user, or undefined for an agent
+});
+
+app.post("/agent/chat", gate.hono(), handler);                       // Hono
+export const POST = gate.fetch(async (req, grant) => Response.json(...)); // Next.js route handlers, Workers, Bun
+const r = await gate.check(request);                                   // anything with web Requests
+```
+
+For each request:
+
+1. A signed-in customer with the balance is served from it, and the usage is tracked. No payment.
+2. Anyone else gets `402 Payment Required` offering both x402 (`exact`, the `PAYMENT-REQUIRED` header) and MPP (`charge`, `WWW-Authenticate: Payment`), at the `payPerUse` price.
+3. A request carrying a payment is verified and settled, then served, with the receipt header added to your response. Your puller wallet pays the network fee, so the agent needs only USDC.
+
+A paid request is recorded like any other payment: an invoice of kind `pay_per_use`, a payment with its transaction signature and protocol, and a usage event. It belongs to the signed-in customer if there is one, otherwise to the paying wallet as customer `wallet:<address>`, which starts on no plan. Those customers appear in the dashboard beside your subscribers, marked "Agent". A credential is accepted once: a replayed x402 or MPP payment gets a new 402.
+
+Only payment headers reach nummo (`payment-signature`, `x-payment`, `accept`, and `authorization` when it starts with `Payment`), never your own bearer tokens. If nummo is unreachable, a signed-in customer is served (fail open, unless the feature is in `failClosed`) and an agent gets a 503.
+
+Verification and settlement use Solana's own [`@solana/pay-kit`](https://github.com/solana-foundation/pay-kit), in the nummo API process; nummo does not run a facilitator for anyone else. Payments settle in USDC only. `apps/demo/src/agent.ts` is a working agent: `node src/agent.ts <keypair.json> 4` pays the demo four times, alternating x402 and MPP, with spend limits (this origin, devnet, 0.05 USDC a payment).
+
 ## Subscribing
 
 ```ts

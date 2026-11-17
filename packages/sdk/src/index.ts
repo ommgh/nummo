@@ -321,6 +321,114 @@ export class Nummo {
       this.request<Customer>("PUT", `/v1/customers/${encodeURIComponent(id)}`, p),
   };
 
+  /**
+   * Gate a route for agents and other callers without a plan (milestone M4).
+   * A signed-in customer with the balance is served from it; anyone else gets
+   * a `402 Payment Required` offering x402 and MPP, and is served once they
+   * pay. Paid requests are recorded in nummo against the customer, or against
+   * the paying wallet (`wallet:<address>`). The price comes from `payPerUse`
+   * in the pricing config.
+   *
+   *   const gate = nummo.paywall({ featureId: "premium_message", identify: (req) => userIdFrom(req) });
+   *   app.post("/agent/chat", gate.hono(), handler);              // Hono
+   *   const r = await gate.check(request);                        // anything with web Requests
+   *   if (!r.ok) return r.response;                               // the 402 (or 503)
+   *   return withHeaders(await handler(request), r.headers);      // receipts go back to the payer
+   *
+   * Only payment headers are sent to nummo: `payment-signature`, `x-payment`,
+   * `accept`, and `authorization` when it carries an MPP credential
+   * (`Payment ...`), never your app's own bearer tokens.
+   *
+   * If the API cannot be reached, a signed-in customer is served (fail open,
+   * unless the feature is in `failClosed`) and anyone else gets a 503.
+   */
+  paywall(opts: PaywallOptions) {
+    const run = async (request: Request): Promise<PaywallResult> => {
+      const customerId = (await opts.identify?.(request)) ?? undefined;
+      const value = typeof opts.value === "function" ? await opts.value(request) : (opts.value ?? 1);
+      const properties = typeof opts.properties === "function" ? await opts.properties(request) : opts.properties;
+      const headers: Record<string, string> = {};
+      for (const name of ["payment-signature", "x-payment", "accept"]) {
+        const v = request.headers.get(name);
+        if (v) headers[name] = v;
+      }
+      const auth = request.headers.get("authorization");
+      if (auth && /^payment\s/i.test(auth)) headers.authorization = auth;
+      try {
+        const r = await this.pay({
+          request: { method: request.method, url: request.url, headers },
+          featureId: opts.featureId,
+          value,
+          customerId,
+          properties,
+          description: opts.description,
+        });
+        if (r.status === "payment_required") {
+          return { ok: false, response: new Response(r.response.body, { status: r.response.status, headers: r.response.headers }), price: r.price };
+        }
+        return { ok: true, customerId: r.customerId, paid: r.status === "paid", headers: r.headers, event: r.event };
+      } catch (e) {
+        if (!(e instanceof NummoUnavailableError)) throw e;
+        if (customerId && !this.failClosed.has(opts.featureId)) {
+          return { ok: true, customerId, paid: false, headers: {}, event: null, failedOpen: true };
+        }
+        const body = JSON.stringify({ error: { code: "unavailable", message: "billing is unavailable; try again shortly" } });
+        return { ok: false, response: new Response(body, { status: 503, headers: { "content-type": "application/json", "retry-after": "5" } }), price: null };
+      }
+    };
+    return {
+      check: run,
+      /** Hono middleware: answers the 402 itself, or runs the route and adds the payment receipt headers. */
+      hono:
+        () =>
+        async (c: { req: { raw: Request }; res: Response; set: (key: "nummo", value: PaywallGranted) => void }, next: () => Promise<void>) => {
+          const r = await run(c.req.raw);
+          if (!r.ok) return r.response;
+          c.set("nummo", r);
+          await next();
+          for (const [k, v] of Object.entries(r.headers)) c.res.headers.set(k, v);
+        },
+      /** Wrap a fetch-style handler (Next.js route handlers, Workers, Bun, Deno). */
+      fetch: (handler: (request: Request, grant: PaywallGranted) => Response | Promise<Response>) => async (request: Request) => {
+        const r = await run(request);
+        if (!r.ok) return r.response;
+        const res = await handler(request, r);
+        const out = new Response(res.body, res);
+        for (const [k, v] of Object.entries(r.headers)) out.headers.set(k, v);
+        return out;
+      },
+    };
+  }
+
+  /** The call behind `paywall`: forward a request's payment headers to nummo. */
+  pay(p: {
+    request: { method: string; url: string; headers: Record<string, string> };
+    featureId: string;
+    value?: Quantity;
+    customerId?: string;
+    idempotencyKey?: string;
+    properties?: Record<string, unknown>;
+    description?: string;
+  }) {
+    return this.request<PayResponse>("POST", "/v1/pay", { ...p, value: q(p.value) });
+  }
+
+  /**
+   * Record a model call's tokens at the model's price (`models` in the pricing
+   * config). Each kind of token is a usage event on the model's feature for it.
+   */
+  trackTokens(p: { customerId: string; model: string; usage: TokenUsage; idempotencyKey?: string; properties?: Record<string, unknown> }) {
+    return this.request<{ customerId: string; model: string; events: (TrackResponse & { kind: keyof TokenUsage })[] }>("POST", "/v1/track/tokens", {
+      ...p,
+      usage: tokenUsage(p.usage),
+    });
+  }
+
+  /** May this customer make this model call? Pass the expected tokens, for example the prompt size and max output. */
+  checkTokens(p: { customerId: string; model: string; usage: TokenUsage }) {
+    return this.request<CheckResponse & { model: string }>("POST", "/v1/check/tokens", { ...p, usage: tokenUsage(p.usage) });
+  }
+
   readonly config = {
     /** Apply a config document (from @usenummo/config's toDocument). */
     push: (doc: unknown, opts: { dryRun?: boolean } = {}) =>
@@ -331,6 +439,52 @@ export class Nummo {
       ),
   };
 }
+
+
+export type TokenUsage = { input?: Quantity; output?: Quantity; cachedInput?: Quantity };
+
+function tokenUsage(u: TokenUsage) {
+  return { input: q(u.input), output: q(u.output), cachedInput: q(u.cachedInput) };
+}
+
+export type PaidEvent = TrackResponse & {
+  paid: { protocol: "x402" | "mpp"; signature: string; amount: string; wallet: string | null; invoiceId: string };
+};
+
+export type PayResponse =
+  | { status: "allowed"; customerId: string; event: TrackResponse | null; headers: Record<string, string> }
+  | {
+      status: "payment_required";
+      response: { status: number; headers: Record<string, string>; body: string };
+      price: { featureId: string; value: string; amount: string; payTo: string } | null;
+    }
+  /** `event` is null only if the payment settled but nummo could not record it (the API logs it). */
+  | { status: "paid"; customerId: string; event: PaidEvent | null; headers: Record<string, string> };
+
+export type PaywallOptions = {
+  /** The metered feature the route uses. Agents pay its `payPerUse` price. */
+  featureId: string;
+  /** Units the request uses. Default 1. */
+  value?: Quantity | ((request: Request) => Quantity | Promise<Quantity>);
+  /** The signed-in customer, if any. Return undefined for agents and other anonymous callers. */
+  identify?: (request: Request) => string | null | undefined | Promise<string | null | undefined>;
+  /** Shown to the payer in the challenge. */
+  description?: string;
+  properties?: Record<string, unknown> | ((request: Request) => Record<string, unknown> | Promise<Record<string, unknown>>);
+};
+
+export type PaywallGranted = {
+  ok: true;
+  customerId: string;
+  /** True when the request was paid on the spot rather than from a balance. */
+  paid: boolean;
+  /** Payment receipt headers (`payment-response`, `payment-receipt`): add them to your response. */
+  headers: Record<string, string>;
+  event: TrackResponse | PaidEvent | null;
+  failedOpen?: boolean;
+};
+
+export type PaywallResult = PaywallGranted | { ok: false; response: Response; price: { featureId: string; value: string; amount: string; payTo: string } | null };
 
 export type Customer = {
   id: string;
@@ -406,14 +560,14 @@ export type CustomerSummary = {
 export type Invoice = {
   id: string;
   subscriptionId: string | null;
-  kind: "activation" | "renewal" | "overage" | "topup";
+  kind: "activation" | "renewal" | "overage" | "topup" | "pay_per_use";
   status: "open" | "paid" | "void" | "uncollectible";
   periodStart: string;
   total: string;
   amountPaid: string;
   createdAt: string;
   paidAt: string | null;
-  lines: { kind: "base" | "overage" | "writeoff" | "proration" | "topup"; featureId: string | null; quantity: string | null; amount: string }[];
+  lines: { kind: "base" | "overage" | "writeoff" | "proration" | "topup" | "pay_per_use"; featureId: string | null; quantity: string | null; amount: string }[];
   payments: { signature: string; amount: string; status: string; createdAt: string }[];
 };
 
