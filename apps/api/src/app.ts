@@ -10,7 +10,7 @@ import { z } from "zod";
 import {
   applyConfig,
   attach,
-  BillError,
+  NummoError,
   check,
   finalize,
   getCustomer,
@@ -22,7 +22,7 @@ import {
   upsertCustomer,
   type Db,
   type Scope,
-} from "@bill/db";
+} from "@nummo/db";
 
 const decimal = z.string().regex(/^\d+(\.\d{1,9})?$/, "a non-negative decimal string with up to 9 places");
 const id = z.string().min(1).max(255);
@@ -76,11 +76,11 @@ async function body<T extends z.ZodType>(c: Context, schema: T): Promise<z.infer
   try {
     raw = await c.req.json();
   } catch {
-    throw new BillError("invalid_request", "body must be JSON");
+    throw new NummoError("invalid_request", "body must be JSON");
   }
   const parsed = schema.safeParse(raw);
   if (!parsed.success) {
-    throw new BillError(
+    throw new NummoError(
       "invalid_request",
       parsed.error.issues.map((i) => `${i.path.join(".") || "body"}: ${i.message}`).join("; "),
     );
@@ -94,7 +94,7 @@ export function createApp(db: Db) {
   const app = new Hono<Vars>();
 
   app.onError((err, c) => {
-    if (err instanceof BillError) {
+    if (err instanceof NummoError) {
       return c.json({ error: { code: err.code, message: err.message, ...(err.details ? { details: err.details } : {}) } }, err.status as 400);
     }
     console.error(err);
@@ -109,7 +109,7 @@ export function createApp(db: Db) {
     const header = c.req.header("authorization") ?? "";
     const key = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
     const scope = key ? await resolveApiKey(db, key) : null;
-    if (!scope) throw new BillError("unauthorized", "missing or invalid API key");
+    if (!scope) throw new NummoError("unauthorized", "missing or invalid API key");
     c.set("scope", scope);
     await next();
   });
@@ -176,7 +176,7 @@ export function createApp(db: Db) {
 
   v1.put("/config", async (c) => {
     const raw = await c.req.json().catch(() => {
-      throw new BillError("invalid_request", "body must be JSON");
+      throw new NummoError("invalid_request", "body must be JSON");
     });
     const dryRun = c.req.query("dryRun") === "1" || c.req.query("dryRun") === "true";
     return c.json(await applyConfig(db, c.get("scope"), raw, { dryRun }));
@@ -190,7 +190,7 @@ export function createApp(db: Db) {
     ["get", "/verify", "M2"],
   ] as const) {
     v1[method](path, () => {
-      throw new BillError("not_implemented", `${path} arrives in milestone ${milestone}`);
+      throw new NummoError("not_implemented", `${path} arrives in milestone ${milestone}`);
     });
   }
 

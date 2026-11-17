@@ -14,10 +14,10 @@ import {
   formatQty,
   qty,
   reconcileGrants,
-} from "@bill/core";
+} from "@nummo/core";
 import type { Scope, Tx } from "./client.ts";
 import { loadCatalog, findDefaultPlanVersion } from "./catalog.ts";
-import { BillError } from "./errors.ts";
+import { NummoError } from "./errors.ts";
 import { newId } from "./ids.ts";
 import { accruals, customers, grants, ledgerEntries, locks, planItems, planVersions, subscriptions } from "./schema.ts";
 
@@ -86,7 +86,7 @@ async function lockCustomer(tx: Tx, scope: Scope, customerId: string) {
   const rows = await tx.execute(
     sql`select id from customers where org_id = ${scope.orgId} and env = ${scope.env} and id = ${customerId} for update`,
   );
-  if (rows.rows.length === 0) throw new BillError("customer_not_found", `customer ${customerId} not found`);
+  if (rows.rows.length === 0) throw new NummoError("customer_not_found", `customer ${customerId} not found`);
 }
 
 type LockAllocation = { grantId: string; featureId: string; amount: string };

@@ -1,5 +1,5 @@
-// The pricing config from docs/04-api-and-config.md. Apply with: pnpm --filter @bill/demo push
-import { defineConfig, feature, plan, usdc } from "@bill/config";
+// The pricing config from docs/04-api-and-config.md. Apply with: pnpm --filter @nummo/demo push
+import { defineConfig, feature, plan, usdc } from "@nummo/config";
 
 export const sso = feature({ id: "sso", type: "boolean" });
 export const basicMessage = feature({ id: "basic_message", type: "metered", consumable: true });

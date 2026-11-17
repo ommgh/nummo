@@ -7,8 +7,8 @@ Everything in this document is a proposal for our own interface. Names can chang
 Pricing lives in one file in the merchant's repository and is applied with the CLI.
 
 ```ts
-// bill.config.ts
-import { defineConfig, feature, plan, usdc } from "@bill/config";
+// nummo.config.ts
+import { defineConfig, feature, plan, usdc } from "@nummo/config";
 
 export const sso = feature({ id: "sso", type: "boolean" });
 
@@ -67,27 +67,27 @@ Rules:
 
 | Command | What it does |
 | --- | --- |
-| `bill login` | Stores an API key for the test or live environment. |
-| `bill push` | Shows a diff between the file and what is deployed, then applies it on confirmation. |
-| `bill push --yes` | Applies without asking. For CI. |
-| `bill plans publish` | Creates the on-chain plan for any new paid plan version. Needs the merchant wallet's signature. |
-| `bill customers get <id>` | Prints a customer's plan, balances and recent usage. |
-| `bill verify` | Compares our records with the chain and lists differences. |
+| `nummo login` | Stores an API key for the test or live environment. |
+| `nummo push` | Shows a diff between the file and what is deployed, then applies it on confirmation. |
+| `nummo push --yes` | Applies without asking. For CI. |
+| `nummo plans publish` | Creates the on-chain plan for any new paid plan version. Needs the merchant wallet's signature. |
+| `nummo customers get <id>` | Prints a customer's plan, balances and recent usage. |
+| `nummo verify` | Compares our records with the chain and lists differences. |
 
 Publishing a plan on-chain needs the merchant's wallet, so it is a separate step from `push`. The dashboard offers the same step with a browser wallet.
 
 ## SDK
 
 ```ts
-import { Bill } from "@bill/sdk";
+import { Nummo } from "@nummo/sdk";
 
-const bill = new Bill({ secretKey: process.env.BILL_SECRET_KEY });
+const nummo = new Nummo({ secretKey: process.env.NUMMO_SECRET_KEY });
 ```
 
 ### attach: put a customer on a plan
 
 ```ts
-const result = await bill.attach({
+const result = await nummo.attach({
   customerId: "user_123",
   planId: "pro",
   successUrl: "https://app.example.com/billing?ok=1",
@@ -100,12 +100,12 @@ if (result.checkoutUrl) redirect(result.checkoutUrl);
 - Paid plan: returns a checkout URL where the customer connects a wallet and signs once.
 - Customer already on a paid plan: returns a checkout URL for the upgrade or downgrade.
 
-`bill.preview({ customerId, planId })` returns what would be charged today and the new ceiling, without changing anything.
+`nummo.preview({ customerId, planId })` returns what would be charged today and the new ceiling, without changing anything.
 
 ### check: may this customer do this
 
 ```ts
-const { allowed, balance } = await bill.check({
+const { allowed, balance } = await nummo.check({
   customerId: "user_123",
   featureId: "premium_message",
   requiredBalance: 1,
@@ -119,7 +119,7 @@ For a boolean feature, omit `requiredBalance`. The response includes the remaini
 ### track: record usage
 
 ```ts
-await bill.track({
+await nummo.track({
   customerId: "user_123",
   featureId: "premium_message",
   value: 1,
@@ -135,7 +135,7 @@ await bill.track({
 ```ts
 const lockId = `completion_${requestId}`;
 
-const { allowed } = await bill.check({
+const { allowed } = await nummo.check({
   customerId: "user_123",
   featureId: "tokens",
   requiredBalance: 4000,
@@ -145,7 +145,7 @@ if (!allowed) return showUpgradePrompt();
 
 const completion = await runModel();
 
-await bill.balances.finalize({
+await nummo.balances.finalize({
   lockId,
   action: "confirm",
   overrideValue: completion.usage.totalTokens,
@@ -157,7 +157,7 @@ await bill.balances.finalize({
 ### Reading a customer
 
 ```ts
-const customer = await bill.customers.get("user_123");
+const customer = await nummo.customers.get("user_123");
 // customer.subscriptions, customer.balances, customer.invoices
 ```
 
@@ -166,7 +166,7 @@ This is what a merchant uses to render their own billing page. Each balance incl
 ### Top-ups
 
 ```ts
-const { checkoutUrl } = await bill.topUp({
+const { checkoutUrl } = await nummo.topUp({
   customerId: "user_123",
   featureId: "credits",
   amount: usdc("10"),
@@ -178,7 +178,7 @@ Automatic top-up is part of a plan's config (threshold, refill amount, and a per
 ### Customer portal
 
 ```ts
-const { url } = await bill.portal({ customerId: "user_123" });
+const { url } = await nummo.portal({ customerId: "user_123" });
 ```
 
 The portal shows the plan, the on-chain ceiling, usage this period, receipts with links to each transaction, and a cancel button that asks the wallet to sign `cancelSubscription`.
@@ -209,7 +209,7 @@ Errors use a consistent body: `{ "error": { "code": "insufficient_balance", "mes
 
 ## Webhook events
 
-Delivered as `POST` with a JSON body and an `X-Bill-Signature` header (HMAC-SHA256 of the body with the endpoint's secret).
+Delivered as `POST` with a JSON body and an `X-Nummo-Signature` header (HMAC-SHA256 of the body with the endpoint's secret).
 
 | Event | When |
 | --- | --- |

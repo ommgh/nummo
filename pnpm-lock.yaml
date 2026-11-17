@@ -124,12 +124,12 @@ importers:
 
   apps/api:
     dependencies:
-      '@bill/db':
-        specifier: workspace:*
-        version: link:../../packages/db
       '@hono/node-server':
         specifier: ^2.1.9
         version: 2.1.9(hono@4.13.19)
+      '@nummo/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       hono:
         specifier: ^4.13.19
         version: 4.13.19
@@ -137,31 +137,31 @@ importers:
         specifier: ^4.6.7
         version: 4.6.7
     devDependencies:
-      '@bill/config':
+      '@nummo/config':
         specifier: workspace:*
         version: link:../../packages/config
-      '@bill/sdk':
+      '@nummo/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
 
   apps/demo:
     dependencies:
-      '@bill/config':
-        specifier: workspace:*
-        version: link:../../packages/config
-      '@bill/sdk':
-        specifier: workspace:*
-        version: link:../../packages/sdk
       '@hono/node-server':
         specifier: ^2.1.9
         version: 2.1.9(hono@4.13.19)
+      '@nummo/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@nummo/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
       hono:
         specifier: ^4.13.19
         version: 4.13.19
 
   packages/config:
     dependencies:
-      '@bill/core':
+      '@nummo/core':
         specifier: workspace:*
         version: link:../core
       zod:
@@ -172,10 +172,10 @@ importers:
 
   packages/db:
     dependencies:
-      '@bill/config':
+      '@nummo/config':
         specifier: workspace:*
         version: link:../config
-      '@bill/core':
+      '@nummo/core':
         specifier: workspace:*
         version: link:../core
       drizzle-orm:

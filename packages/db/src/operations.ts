@@ -22,9 +22,9 @@ import {
   poolsFor,
   qty,
   sumQty,
-} from "@bill/core";
+} from "@nummo/core";
 import type { Db, Scope } from "./client.ts";
-import { BillError } from "./errors.ts";
+import { NummoError } from "./errors.ts";
 import { newId } from "./ids.ts";
 import { accruals, grants, ledgerEntries, locks, outbox, usageEvents } from "./schema.ts";
 import { type CustomerCtx, inCustomerTx, refresh, releaseLock } from "./snapshot.ts";
@@ -99,15 +99,15 @@ function parsePositive(value: string | undefined, field: string, fallback: Qty):
   try {
     q = qty(value);
   } catch {
-    throw new BillError("invalid_request", `${field} must be a decimal string with up to 9 places`);
+    throw new NummoError("invalid_request", `${field} must be a decimal string with up to 9 places`);
   }
-  if (q < 0n) throw new BillError("invalid_request", `${field} must not be negative`);
+  if (q < 0n) throw new NummoError("invalid_request", `${field} must not be negative`);
   return q;
 }
 
 function featureOf(ctx: CustomerCtx, featureId: string) {
   const f = ctx.catalog.features.get(featureId);
-  if (!f) throw new BillError("feature_not_found", `feature ${featureId} not found`);
+  if (!f) throw new NummoError("feature_not_found", `feature ${featureId} not found`);
   return f;
 }
 
@@ -144,7 +144,7 @@ async function applyDeduction(
       .set({ remaining: sql`${grants.remaining} - ${amount}::numeric` })
       .where(and(eq(grants.id, a.grantId), sql`${grants.remaining} >= ${amount}::numeric`))
       .returning({ id: grants.id });
-    if (updated.length !== 1) throw new BillError("internal", `grant ${a.grantId} changed under the customer lock`);
+    if (updated.length !== 1) throw new NummoError("internal", `grant ${a.grantId} changed under the customer lock`);
     await ctx.tx.insert(ledgerEntries).values({
       ...ctx.scope,
       customerId: ctx.customerId,
@@ -238,9 +238,9 @@ async function trackInCtx(ctx: CustomerCtx, input: Omit<TrackInput, "customerId"
   }
 
   const f = featureOf(ctx, input.featureId);
-  if (f.type === "boolean") throw new BillError("invalid_request", `feature ${f.id} is boolean; there is nothing to track`);
+  if (f.type === "boolean") throw new NummoError("invalid_request", `feature ${f.id} is boolean; there is nothing to track`);
   if (f.type === "credit_system") {
-    throw new BillError("invalid_request", `track the underlying feature, not the credit system ${f.id} (rule 4)`);
+    throw new NummoError("invalid_request", `track the underlying feature, not the credit system ${f.id} (rule 4)`);
   }
 
   const before = view(ctx, f.id);
@@ -288,7 +288,7 @@ export function track(db: Db, scope: Scope, input: TrackInput): Promise<TrackRes
 
 /** Up to 1,000 events. Each customer's events run in one transaction, in order. */
 export async function trackBatch(db: Db, scope: Scope, events: TrackInput[]): Promise<TrackResult[]> {
-  if (events.length > 1000) throw new BillError("invalid_request", "a batch holds at most 1,000 events");
+  if (events.length > 1000) throw new NummoError("invalid_request", "a batch holds at most 1,000 events");
   const results: TrackResult[] = new Array(events.length);
   const byCustomer = new Map<string, number[]>();
   events.forEach((e, i) => byCustomer.set(e.customerId, [...(byCustomer.get(e.customerId) ?? []), i]));
@@ -303,7 +303,7 @@ export async function trackBatch(db: Db, scope: Scope, events: TrackInput[]): Pr
 // ------------------------------------------------------------------ check
 
 export function check(db: Db, scope: Scope, input: CheckInput): Promise<CheckResult> {
-  if (input.lock && input.sendEvent) throw new BillError("invalid_request", "use either lock or sendEvent, not both");
+  if (input.lock && input.sendEvent) throw new NummoError("invalid_request", "use either lock or sendEvent, not both");
   return inCustomerTx(db, scope, input.customerId, async (ctx) => {
     const f = featureOf(ctx, input.featureId);
 
@@ -345,13 +345,13 @@ export function check(db: Db, scope: Scope, input: CheckInput): Promise<CheckRes
         properties: input.properties,
       });
     } else if (input.lock) {
-      if (f.type === "credit_system") throw new BillError("invalid_request", "lock the underlying feature, not the credit system");
-      if (input.lock.expiresAt.getTime() <= ctx.now.getTime()) throw new BillError("invalid_request", "lock.expiresAt is in the past");
+      if (f.type === "credit_system") throw new NummoError("invalid_request", "lock the underlying feature, not the credit system");
+      if (input.lock.expiresAt.getTime() <= ctx.now.getTime()) throw new NummoError("invalid_request", "lock.expiresAt is in the past");
       const [existing] = await ctx.tx
         .select({ lockId: locks.lockId })
         .from(locks)
         .where(and(eq(locks.orgId, scope.orgId), eq(locks.env, scope.env), eq(locks.lockId, input.lock.lockId)));
-      if (existing) throw new BillError("lock_exists", `lock ${input.lock.lockId} already exists`);
+      if (existing) throw new NummoError("lock_exists", `lock ${input.lock.lockId} already exists`);
 
       const r = planDeduction(pools, required, ctx.now);
       await applyDeduction(ctx, r, "lock", { lockId: input.lock.lockId });
@@ -386,7 +386,7 @@ export async function finalize(db: Db, scope: Scope, input: FinalizeInput) {
     .select({ customerId: locks.customerId })
     .from(locks)
     .where(and(eq(locks.orgId, scope.orgId), eq(locks.env, scope.env), eq(locks.lockId, input.lockId)));
-  if (!found) throw new BillError("lock_not_found", `lock ${input.lockId} not found`);
+  if (!found) throw new NummoError("lock_not_found", `lock ${input.lockId} not found`);
 
   return inCustomerTx(
     db,
@@ -398,12 +398,12 @@ export async function finalize(db: Db, scope: Scope, input: FinalizeInput) {
         .select()
         .from(locks)
         .where(and(eq(locks.orgId, scope.orgId), eq(locks.env, scope.env), eq(locks.lockId, input.lockId)));
-      if (!lock) throw new BillError("lock_not_found", `lock ${input.lockId} not found`);
-      if (lock.status === "expired") throw new BillError("lock_expired", `lock ${input.lockId} expired at ${lock.expiresAt.toISOString()} and was released`);
+      if (!lock) throw new NummoError("lock_not_found", `lock ${input.lockId} not found`);
+      if (lock.status === "expired") throw new NummoError("lock_expired", `lock ${input.lockId} expired at ${lock.expiresAt.toISOString()} and was released`);
       if (lock.status !== "held") {
         // Finalising twice with the same action is a no-op that returns the first outcome.
         const sameAction = (lock.status === "confirmed") === (input.action === "confirm");
-        if (!sameAction) throw new BillError("lock_finalized", `lock ${input.lockId} is already ${lock.status}`);
+        if (!sameAction) throw new NummoError("lock_finalized", `lock ${input.lockId} is already ${lock.status}`);
         const [ev] = lock.usageEventId
           ? await ctx.tx.select({ result: usageEvents.result }).from(usageEvents).where(eq(usageEvents.id, lock.usageEventId))
           : [];

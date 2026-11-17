@@ -10,7 +10,7 @@ export type Env = "test" | "live";
 /** The merchant and environment every query is scoped to. */
 export type Scope = { orgId: string; env: Env };
 
-export function createDb(url: string = process.env.DATABASE_URL ?? "postgres://bill:bill@localhost:5434/bill") {
+export function createDb(url: string = process.env.DATABASE_URL ?? "postgres://nummo:nummo@localhost:5434/nummo") {
   const pool = new pg.Pool({ connectionString: url, max: Number(process.env.DB_POOL_MAX ?? 20) });
   const db = drizzle(pool, { schema });
   return { db, pool, close: () => pool.end() };

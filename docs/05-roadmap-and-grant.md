@@ -40,13 +40,13 @@ Build:
 - Checkout page with wallet connect.
 - Settlement worker: period renewals, overage accrual and threshold collection, safe resend.
 - Failed-payment state machine and retries.
-- Reconciler by polling, and `bill verify`.
+- Reconciler by polling, and `nummo verify`.
 - Webhook outbox and dispatcher.
 
 Done when:
 - A wallet subscribes to Pro with one signature and no SOL.
 - Renewal, overage collection, cancellation and a failed payment all behave as described, on a plan with a short period.
-- `bill verify` reports no drift after each scenario.
+- `nummo verify` reports no drift after each scenario.
 
 ### M3. Product surface and mainnet (about 2 weeks)
 
@@ -142,7 +142,7 @@ A starting point for a 10,000 USD request. Adjust to the programme's rules.
 ## Open questions
 
 1. **Licence.** Decided on 2026-11-17: Apache-2.0, as recommended (Polar uses it, and it includes a patent grant).
-2. **Name.** `bill` is a working name.
+2. **Name.** Decided on 2026-11-17: `nummo` (the working name was `bill`).
 3. **Hosted or self-host first.** The plan assumes self-host first with a hosted demo. A hosted service raises the key custody and regulatory questions above.
 4. **Settlement threshold default.** 5 USDC is a guess. Ask design partners.
 5. **Grace period default.** 72 hours is a guess, and it must stay shorter than the billing period.

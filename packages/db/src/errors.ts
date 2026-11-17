@@ -34,13 +34,13 @@ const STATUS: Record<ErrorCode, number> = {
 };
 
 /** An error with a stable code, rendered as { "error": { "code", "message" } } (doc 04). */
-export class BillError extends Error {
+export class NummoError extends Error {
   readonly code: ErrorCode;
   readonly status: number;
   readonly details: unknown;
   constructor(code: ErrorCode, message: string, details?: unknown) {
     super(message);
-    this.name = "BillError";
+    this.name = "NummoError";
     this.code = code;
     this.status = STATUS[code];
     this.details = details;

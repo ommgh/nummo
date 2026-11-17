@@ -3,10 +3,10 @@
  */
 
 import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
-import { formatBaseUnits, formatQty, isActive, periodAt, poolBalance, qty } from "@bill/core";
+import { formatBaseUnits, formatQty, isActive, periodAt, poolBalance, qty } from "@nummo/core";
 import type { Db, Scope } from "./client.ts";
 import { findPlanVersion } from "./catalog.ts";
-import { BillError } from "./errors.ts";
+import { NummoError } from "./errors.ts";
 import { newId } from "./ids.ts";
 import { customers, grants, plans, planVersions, subscriptions, usageEvents } from "./schema.ts";
 import { ensureCustomer, inCustomerTx, LIVE_STATUSES, refresh } from "./snapshot.ts";
@@ -120,7 +120,7 @@ export async function attach(db: Db, scope: Scope, input: AttachInput) {
       .where(and(eq(plans.orgId, scope.orgId), eq(plans.env, scope.env), eq(plans.id, pv.planId)));
     const paid = pv.ceilingAmount !== null;
     if (paid && !(input.skipPayment && scope.env === "test")) {
-      throw new BillError(
+      throw new NummoError(
         "checkout_required",
         `plan ${pv.planId} is paid; wallet checkout arrives in milestone M2. In the test environment, pass skipPayment: true.`,
       );
@@ -182,13 +182,13 @@ export async function grantBalance(db: Db, scope: Scope, input: GrantInput) {
   try {
     amount = qty(input.amount);
   } catch {
-    throw new BillError("invalid_request", "amount must be a decimal string with up to 9 places");
+    throw new NummoError("invalid_request", "amount must be a decimal string with up to 9 places");
   }
-  if (amount <= 0n) throw new BillError("invalid_request", "amount must be positive");
+  if (amount <= 0n) throw new NummoError("invalid_request", "amount must be positive");
   return inCustomerTx(db, scope, input.customerId, async (ctx) => {
     const f = ctx.catalog.features.get(input.featureId);
-    if (!f) throw new BillError("feature_not_found", `feature ${input.featureId} not found`);
-    if (f.type === "boolean") throw new BillError("invalid_request", "boolean features have no balance");
+    if (!f) throw new NummoError("feature_not_found", `feature ${input.featureId} not found`);
+    if (f.type === "boolean") throw new NummoError("invalid_request", "boolean features have no balance");
     const id = newId("grt");
     await ctx.tx.insert(grants).values({
       id,

@@ -16,5 +16,5 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["apps/*/src", "apps/*/bill.config.ts", "apps/*/test", "packages/*/src", "packages/*/test", "vitest.config.ts", "test"]
+  "include": ["apps/*/src", "apps/*/nummo.config.ts", "apps/*/test", "packages/*/src", "packages/*/test", "vitest.config.ts", "test"]
 }

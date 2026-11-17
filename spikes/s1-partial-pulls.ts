@@ -265,7 +265,7 @@ async function setup() {
       endTs: 0n,
       destinations: [merchant.address],
       pullers: [puller.address],
-      metadataUri: "https://example.com/bill-spike-s1.json",
+      metadataUri: "https://example.com/nummo-spike-s1.json",
     })
     .sendTransaction();
   const [planPda] = await findPlanPda({ owner: merchant.address, planId });

@@ -69,7 +69,7 @@ export const apiKeys = pgTable(
     ...scope,
     /** SHA-256 of the secret key, hex. The key itself is never stored. */
     keyHash: text("key_hash").notNull(),
-    /** First characters of the key, for display ("bill_sk_test_ab12…"). */
+    /** First characters of the key, for display ("nummo_sk_test_ab12…"). */
     prefix: text("prefix").notNull(),
     createdAt: ts("created_at").notNull().defaultNow(),
     revokedAt: ts("revoked_at"),
@@ -133,7 +133,7 @@ export const planVersions = pgTable(
     mint: text("mint").notNull().default("USDC"),
     onchainPlanPda: text("onchain_plan_pda"),
     status: planVersionStatusEnum("status").notNull().default("active"),
-    /** The plan document as last applied, for diffs in `bill push`. */
+    /** The plan document as last applied, for diffs in `nummo push`. */
     document: jsonb("document").notNull(),
     createdAt: ts("created_at").notNull().defaultNow(),
   },

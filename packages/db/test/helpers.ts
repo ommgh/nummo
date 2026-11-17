@@ -1,12 +1,12 @@
 import { sql } from "drizzle-orm";
-import { defineConfig, feature, plan, toDocument, usdc } from "@bill/config";
+import { defineConfig, feature, plan, toDocument, usdc } from "@nummo/config";
 import { applyConfig, createDb, createOrg, runMigrations, type Db, type Scope } from "../src/index.ts";
 
 let shared: ReturnType<typeof createDb> | null = null;
 let migrated = false;
 
 export async function testDb(): Promise<Db> {
-  shared ??= createDb(process.env.DATABASE_URL ?? "postgres://bill:bill@localhost:5434/bill");
+  shared ??= createDb(process.env.DATABASE_URL ?? "postgres://nummo:nummo@localhost:5434/nummo");
   if (!migrated) {
     await runMigrations(shared.db);
     migrated = true;

@@ -1,11 +1,11 @@
 /**
- * Pricing as config (doc 04). Merchants write `bill.config.ts` with these
+ * Pricing as config (doc 04). Merchants write `nummo.config.ts` with these
  * builders; the CLI serialises it with `toDocument` and sends it to
  * `PUT /v1/config`, where the same `validateDocument` runs again.
  */
 
 import { z } from "zod";
-import { type BaseUnits, formatQty, parseHours, qty, usdc } from "@bill/core";
+import { type BaseUnits, formatQty, parseHours, qty, usdc } from "@nummo/core";
 
 export { usdc };
 

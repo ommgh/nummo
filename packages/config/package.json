@@ -1,5 +1,5 @@
 {
-  "name": "@bill/config",
+  "name": "@nummo/config",
   "version": "0.0.0",
   "license": "Apache-2.0",
   "private": true,
@@ -9,7 +9,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@bill/core": "workspace:*",
+    "@nummo/core": "workspace:*",
     "zod": "^4.6.7"
   }
 }

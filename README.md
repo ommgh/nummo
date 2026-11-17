@@ -1,4 +1,4 @@
-# bill
+# nummo
 
 Open-source usage billing and entitlements, settled in stablecoins on Solana. Plans, credit balances and a usage ledger with `check` and `track`, collecting USDC through Solana's native Subscriptions program. The plan is in [docs/](docs/README.md).
 
@@ -11,20 +11,20 @@ Needs Node 22.18+ (TypeScript runs natively, no build step), pnpm and Docker.
 ```bash
 pnpm install
 pnpm db:up                                   # Postgres 18 on localhost:5434
-pnpm --filter @bill/api bootstrap "Acme AI"  # creates an org, prints a test API key
-export BILL_SECRET_KEY=bill_sk_test_...      # the key it printed
+pnpm --filter @nummo/api bootstrap "Acme AI"  # creates an org, prints a test API key
+export NUMMO_SECRET_KEY=nummo_sk_test_...      # the key it printed
 pnpm dev:api                                 # API on http://localhost:8787
 
-# in another shell, with BILL_SECRET_KEY set
-pnpm --filter @bill/demo push                # apply apps/demo/bill.config.ts
-pnpm --filter @bill/demo dev                 # demo chat on http://localhost:3000
+# in another shell, with NUMMO_SECRET_KEY set
+pnpm --filter @nummo/demo push                # apply apps/demo/nummo.config.ts
+pnpm --filter @nummo/demo dev                 # demo chat on http://localhost:3000
 ```
 
 ```ts
-import { Bill } from "@bill/sdk";
-const bill = new Bill(); // reads BILL_SECRET_KEY and BILL_API_URL
+import { Nummo } from "@nummo/sdk";
+const nummo = new Nummo(); // reads NUMMO_SECRET_KEY and NUMMO_API_URL
 
-const { allowed } = await bill.check({ customerId: "user_123", featureId: "premium_message", sendEvent: true });
+const { allowed } = await nummo.check({ customerId: "user_123", featureId: "premium_message", sendEvent: true });
 ```
 
 ## Layout

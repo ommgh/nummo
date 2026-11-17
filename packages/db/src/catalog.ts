@@ -3,10 +3,10 @@
  */
 
 import { and, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
-import { type ConfigDoc, ConfigError, onchainTerms, type PlanDoc, validateDocument } from "@bill/config";
-import { type Catalog, type FeatureDef, qty } from "@bill/core";
+import { type ConfigDoc, ConfigError, onchainTerms, type PlanDoc, validateDocument } from "@nummo/config";
+import { type Catalog, type FeatureDef, qty } from "@nummo/core";
 import type { Db, DbOrTx, Scope } from "./client.ts";
-import { BillError } from "./errors.ts";
+import { NummoError } from "./errors.ts";
 import { newId } from "./ids.ts";
 import { creditRates, features, planItems, plans, planVersions } from "./schema.ts";
 
@@ -46,7 +46,7 @@ export async function applyConfig(db: Db, scope: Scope, raw: unknown, opts: { dr
   try {
     doc = validateDocument(raw);
   } catch (e) {
-    if (e instanceof ConfigError) throw new BillError("invalid_config", e.message, { issues: e.issues });
+    if (e instanceof ConfigError) throw new NummoError("invalid_config", e.message, { issues: e.issues });
     throw e;
   }
 
@@ -68,7 +68,7 @@ export async function applyConfig(db: Db, scope: Scope, raw: unknown, opts: { dr
           changes.push({ kind: "feature", id: f.id, action: "create" });
         } else {
           if (prev.type !== f.type) {
-            throw new BillError("invalid_config", `feature ${f.id} cannot change type from ${prev.type} to ${f.type}; use a new id`);
+            throw new NummoError("invalid_config", `feature ${f.id} cannot change type from ${prev.type} to ${f.type}; use a new id`);
           }
           const same = prev.name === row.name && prev.consumable === row.consumable && prev.archivedAt === null;
           await tx
@@ -141,7 +141,7 @@ export async function applyConfig(db: Db, scope: Scope, raw: unknown, opts: { dr
         let versionId: string;
         if (prev) {
           if (frozenTerms(prev.document as PlanDoc) !== frozenTerms(p)) {
-            throw new BillError(
+            throw new NummoError(
               "version_required",
               `plan ${p.id} v${p.version}: price, period and overage terms are fixed once a version exists ` +
                 `(they become the on-chain plan the customer signs). Bump the version to change them.`,
@@ -213,7 +213,7 @@ export async function findPlanVersion(tx: DbOrTx, scope: Scope, planId: string, 
     .orderBy(sql`${planVersions.version} desc`)
     .limit(1);
   const pv = rows[0];
-  if (!pv) throw new BillError("plan_not_found", version === undefined ? `no active version of plan ${planId}` : `plan ${planId} v${version} not found`);
+  if (!pv) throw new NummoError("plan_not_found", version === undefined ? `no active version of plan ${planId}` : `plan ${planId} v${version} not found`);
   return pv;
 }
 

@@ -1,12 +1,12 @@
-# bill: usage-based billing on Solana stablecoin rails
+# nummo: usage-based billing on Solana stablecoin rails
 
-Working name: `bill`. Last updated: 2026-11-17. Status: milestone M1 built (see the repository [README](../README.md)); spikes S1 and S2 passed on devnet.
+Name: `nummo` (decided 2026-11-17; the working name was `bill`). Last updated: 2026-11-17. Status: milestone M1 built (see the repository [README](../README.md)); spikes S1 and S2 passed on devnet.
 
 ## Summary
 
-`bill` is an open-source billing and entitlements layer for businesses that charge by usage (AI tokens, API calls, credits) and want to accept stablecoins on Solana.
+`nummo` is an open-source billing and entitlements layer for businesses that charge by usage (AI tokens, API calls, credits) and want to accept stablecoins on Solana.
 
-It does for Solana what [Autumn](https://useautumn.com/) does for Stripe. The merchant's app asks `bill` two questions on every request: "may this customer do this?" (`check`) and "they just did this much" (`track`). `bill` keeps the plans, credit balances, and usage ledger, and it collects what is owed by pulling USDC from the customer's wallet through Solana's native Subscriptions program.
+It does for Solana what [Autumn](https://useautumn.com/) does for Stripe. The merchant's app asks `nummo` two questions on every request: "may this customer do this?" (`check`) and "they just did this much" (`track`). `nummo` keeps the plans, credit balances, and usage ledger, and it collects what is owed by pulling USDC from the customer's wallet through Solana's native Subscriptions program.
 
 We do not write a new on-chain program. Solana shipped an audited one in June 2026, and the payment protocols for agents (x402 and MPP) already exist. The missing piece is the stateful layer on top of them, and that is what we build.
 
@@ -21,7 +21,7 @@ We do not write a new on-chain program. Solana shipped an audited one in June 20
 | D5 | Open source, self-hostable, TypeScript. | Required by every Solana grant route, and matches the SDKs we depend on. |
 | D6 | Write a small core of our own. Use Polar and Autumn as design references, not as a fork. | Both are built around card processors. The parts we need are the data model and the rules, which are small. |
 
-Licence: Apache-2.0 (decided 2026-11-17). Still open: project name (the repository is `nummo`), and who holds the key that signs pulls in a hosted deployment. See the open questions in [05-roadmap-and-grant.md](05-roadmap-and-grant.md).
+Licence: Apache-2.0 (decided 2026-11-17). Still open: who holds the key that signs pulls in a hosted deployment. See the open questions in [05-roadmap-and-grant.md](05-roadmap-and-grant.md).
 
 ## Read in this order
 
@@ -45,7 +45,7 @@ These terms are used the same way in every document.
 
 | Term | Meaning |
 | --- | --- |
-| Merchant | The business that integrates `bill` (for example an AI startup). |
+| Merchant | The business that integrates `nummo` (for example an AI startup). |
 | Customer | The merchant's end user or end organisation, the one who pays. |
 | Feature | Something a customer can use. Either boolean (has SSO or not) or metered (messages, tokens). |
 | Credit system | A shared balance that several metered features draw from at different rates. |

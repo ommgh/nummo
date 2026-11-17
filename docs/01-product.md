@@ -46,7 +46,7 @@ Capabilities, in priority order:
 These are the reasons to use this instead of Autumn plus Stripe, and they belong in the pitch.
 
 - **The spend cap is enforced by the chain.** The customer signs a plan whose ceiling is public and immutable. The merchant cannot pull more, whatever our software does. Card billing has no equivalent.
-- **Non-custodial.** Money goes from the customer's token account to the merchant's. `bill` never holds funds.
+- **Non-custodial.** Money goes from the customer's token account to the merchant's. `nummo` never holds funds.
 - **Frequent settlement is nearly free.** Fees are a fraction of a cent, so overage can be collected at a small threshold (for example every $5 accrued) instead of once a month. The merchant's credit exposure is bounded by the threshold.
 - **No chargebacks, immediate finality.** Settlement is final within seconds.
 - **One ledger for people and agents.** A wallet is the identity in both cases.

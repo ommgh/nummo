@@ -21,14 +21,14 @@ export async function createOrg(db: Db, name: string): Promise<string> {
 
 /** Create a secret key. The plain key is returned once and never stored. */
 export async function createApiKey(db: Db, orgId: string, env: Env): Promise<{ id: string; key: string }> {
-  const key = `bill_sk_${env}_${randomBytes(24).toString("base64url")}`;
+  const key = `nummo_sk_${env}_${randomBytes(24).toString("base64url")}`;
   const id = newId("key");
   await db.insert(apiKeys).values({ id, orgId, env, keyHash: hashKey(key), prefix: key.slice(0, 18) });
   return { id, key };
 }
 
 export async function resolveApiKey(db: Db, key: string): Promise<Scope | null> {
-  if (!key.startsWith("bill_sk_")) return null;
+  if (!key.startsWith("nummo_sk_")) return null;
   const [row] = await db
     .select({ orgId: apiKeys.orgId, env: apiKeys.env })
     .from(apiKeys)

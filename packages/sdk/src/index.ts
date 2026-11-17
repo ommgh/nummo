@@ -1,9 +1,9 @@
 /**
- * TypeScript client for the bill API (doc 04).
+ * TypeScript client for the nummo API (doc 04).
  *
- *   const bill = new Bill({ secretKey: process.env.BILL_SECRET_KEY });
- *   const { allowed } = await bill.check({ customerId, featureId: "premium_message" });
- *   await bill.track({ customerId, featureId: "premium_message", value: 1 });
+ *   const nummo = new Nummo({ secretKey: process.env.NUMMO_SECRET_KEY });
+ *   const { allowed } = await nummo.check({ customerId, featureId: "premium_message" });
+ *   await nummo.track({ customerId, featureId: "premium_message", value: 1 });
  *
  * Failure mode (doc 02): the client fails open by default. If the API cannot be
  * reached, `check` returns `allowed: true` with `failedOpen: true`, and `track`
@@ -14,7 +14,7 @@
 
 export type Quantity = number | string;
 
-export type BillOptions = {
+export type NummoOptions = {
   secretKey?: string;
   baseUrl?: string;
   /** Per-request timeout. Default 5 seconds. */
@@ -72,22 +72,22 @@ export type TrackResponse = {
   replayed: boolean;
 };
 
-export class BillApiError extends Error {
+export class NummoApiError extends Error {
   readonly code: string;
   readonly status: number;
   constructor(status: number, code: string, message: string) {
     super(message);
-    this.name = "BillApiError";
+    this.name = "NummoApiError";
     this.code = code;
     this.status = status;
   }
 }
 
 /** The API could not be reached, timed out, or failed with a 5xx. */
-export class BillUnavailableError extends Error {
+export class NummoUnavailableError extends Error {
   constructor(message: string, options?: { cause?: unknown }) {
     super(message, options);
-    this.name = "BillUnavailableError";
+    this.name = "NummoUnavailableError";
   }
 }
 
@@ -105,7 +105,7 @@ export function usdc(amount: string | number): bigint {
   return BigInt(whole!) * 1_000_000n + BigInt(frac.padEnd(6, "0"));
 }
 
-export class Bill {
+export class Nummo {
   private readonly key: string;
   private readonly baseUrl: string;
   private readonly timeoutMs: number;
@@ -116,11 +116,11 @@ export class Bill {
   private flushing: Promise<void> | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(opts: BillOptions = {}) {
-    const key = opts.secretKey ?? process.env.BILL_SECRET_KEY;
-    if (!key) throw new Error("bill: pass secretKey or set BILL_SECRET_KEY");
+  constructor(opts: NummoOptions = {}) {
+    const key = opts.secretKey ?? process.env.NUMMO_SECRET_KEY;
+    if (!key) throw new Error("nummo: pass secretKey or set NUMMO_SECRET_KEY");
     this.key = key;
-    this.baseUrl = (opts.baseUrl ?? process.env.BILL_API_URL ?? "http://localhost:8787").replace(/\/$/, "");
+    this.baseUrl = (opts.baseUrl ?? process.env.NUMMO_API_URL ?? "http://localhost:8787").replace(/\/$/, "");
     this.timeoutMs = opts.timeoutMs ?? 5_000;
     this.failClosed = new Set(opts.failClosed ?? []);
     this.maxQueue = opts.maxQueue ?? 10_000;
@@ -142,13 +142,13 @@ export class Bill {
         signal: AbortSignal.timeout(this.timeoutMs),
       });
     } catch (e) {
-      throw new BillUnavailableError(`bill API unreachable: ${(e as Error).message}`, { cause: e });
+      throw new NummoUnavailableError(`nummo API unreachable: ${(e as Error).message}`, { cause: e });
     }
     const text = await res.text();
     const json = text ? JSON.parse(text) : {};
     // 501 is a definite answer (not built yet), not an outage, so it must not fail open.
-    if (res.status >= 500 && res.status !== 501) throw new BillUnavailableError(`bill API error ${res.status}: ${json?.error?.message ?? text}`);
-    if (!res.ok) throw new BillApiError(res.status, json?.error?.code ?? "unknown", json?.error?.message ?? text);
+    if (res.status >= 500 && res.status !== 501) throw new NummoUnavailableError(`nummo API error ${res.status}: ${json?.error?.message ?? text}`);
+    if (!res.ok) throw new NummoApiError(res.status, json?.error?.code ?? "unknown", json?.error?.message ?? text);
     return json as T;
   }
 
@@ -163,7 +163,7 @@ export class Bill {
         lock: p.lock ? { lockId: p.lock.lockId, expiresAt: new Date(p.lock.expiresAt).toISOString() } : undefined,
       });
     } catch (e) {
-      if (!(e instanceof BillUnavailableError)) throw e;
+      if (!(e instanceof NummoUnavailableError)) throw e;
       const allowed = !this.failClosed.has(p.featureId);
       // A fail-open check with sendEvent still owes the usage: queue it.
       if (allowed && p.sendEvent) {
@@ -182,7 +182,7 @@ export class Bill {
     try {
       return await this.sendTrack(params);
     } catch (e) {
-      if (!(e instanceof BillUnavailableError)) throw e;
+      if (!(e instanceof NummoUnavailableError)) throw e;
       this.enqueue(params);
       return null;
     }
@@ -223,7 +223,7 @@ export class Bill {
             await this.sendTrack(item.params);
             this.queue.shift();
           } catch (e) {
-            if (e instanceof BillUnavailableError) {
+            if (e instanceof NummoUnavailableError) {
               item.attempts++;
               return;
             }
@@ -259,7 +259,7 @@ export class Bill {
   };
 
   readonly config = {
-    /** Apply a config document (from @bill/config's toDocument). */
+    /** Apply a config document (from @nummo/config's toDocument). */
     push: (doc: unknown, opts: { dryRun?: boolean } = {}) =>
       this.request<{ changes: { kind: string; id: string; action: string }[]; dryRun: boolean }>(
         "PUT",

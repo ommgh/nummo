@@ -9,9 +9,9 @@
 
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
-import { Bill } from "@bill/sdk";
+import { Nummo } from "@nummo/sdk";
 
-const bill = new Bill();
+const nummo = new Nummo();
 const app = new Hono();
 
 app.get("/", (c) => c.html(PAGE));
@@ -19,7 +19,7 @@ app.get("/", (c) => c.html(PAGE));
 app.post("/api/chat", async (c) => {
   const { userId, message, premium } = await c.req.json<{ userId: string; message: string; premium: boolean }>();
   const featureId = premium ? "premium_message" : "basic_message";
-  const gate = await bill.check({ customerId: userId, featureId, sendEvent: true, properties: { chars: message.length } });
+  const gate = await nummo.check({ customerId: userId, featureId, sendEvent: true, properties: { chars: message.length } });
   if (!gate.allowed) {
     return c.json({ allowed: false, reply: null, reason: "Out of credits. Upgrade to Pro for 1,000 credits every 30 days." }, 402);
   }
@@ -29,7 +29,7 @@ app.post("/api/chat", async (c) => {
 
 app.get("/api/me/:userId", async (c) => {
   try {
-    return c.json(await bill.customers.get(c.req.param("userId")));
+    return c.json(await nummo.customers.get(c.req.param("userId")));
   } catch {
     return c.json({ balances: [], subscriptions: [] });
   }
@@ -38,7 +38,7 @@ app.get("/api/me/:userId", async (c) => {
 app.post("/api/upgrade", async (c) => {
   const { userId } = await c.req.json<{ userId: string }>();
   // M2 replaces skipPayment with a checkout URL where the wallet signs once.
-  return c.json(await bill.attach({ customerId: userId, planId: "pro", skipPayment: true }));
+  return c.json(await nummo.attach({ customerId: userId, planId: "pro", skipPayment: true }));
 });
 
 const port = Number(process.env.DEMO_PORT ?? 3000);
@@ -46,7 +46,7 @@ serve({ fetch: app.fetch, port }, () => console.log(`demo chat on http://localho
 
 const PAGE = /* html */ `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>bill demo chat</title>
+<title>nummo demo chat</title>
 <style>
   :root { --bg:#fafaf9; --fg:#1c1917; --muted:#78716c; --line:#e7e5e4; --accent:#7c3aed; --bad:#b91c1c; }
   @media (prefers-color-scheme: dark) { :root { --bg:#1c1917; --fg:#f5f5f4; --muted:#a8a29e; --line:#44403c; --accent:#a78bfa; --bad:#f87171; } }
