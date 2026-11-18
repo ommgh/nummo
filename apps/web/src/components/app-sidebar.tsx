@@ -20,9 +20,8 @@ export function AppSidebar({ pathname }: { pathname: string }) {
   return (
     <Sidebar
       className={cn(
-        "*:data-[slot=sidebar-inner]:bg-sidebar",
-        "*:data-[slot=sidebar-inner]:dark:bg-[radial-gradient(70%_20%_at_0%_0%,rgb(153_69_255/0.14),transparent)]",
-        "**:data-[slot=sidebar-menu-button]:[&>span]:text-foreground/80",
+        "border-none! *:data-[slot=sidebar-inner]:bg-sidebar",
+        "**:data-[slot=sidebar-menu-button]:[&>span]:text-foreground/85",
       )}
       collapsible="icon"
       variant="sidebar"
@@ -32,8 +31,8 @@ export function AppSidebar({ pathname }: { pathname: string }) {
           <Link to="/dashboard">
             <LogoMark className="size-5 shrink-0" />
             <span className="flex min-w-0 flex-col leading-tight">
-              <span className="font-display font-semibold text-foreground! text-sm">nummo</span>
-              <span className="truncate text-[10px] text-muted-foreground!">{session.org?.name}</span>
+              <span className="font-semibold text-[15px] text-foreground! tracking-[-0.03em]">nummo</span>
+              <span className="label-mono truncate text-[10px] text-muted-foreground!">{session.org?.name}</span>
             </span>
           </Link>
         </SidebarMenuButton>

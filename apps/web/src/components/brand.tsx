@@ -1,28 +1,43 @@
+import { useId } from "react";
 import type React from "react";
 import { cn } from "@/lib/utils";
 
-/** The nummo mark: a stack of three offset bars, Solana-gradient, like coins settling into a ledger. */
+export const PALETTE = {
+  ink: "#1b1a19",
+  paper: "#f2efe9",
+  cobalt: "#1764ff",
+  tangerine: "#ff5a1f",
+  marigold: "#ffae0a",
+  iris: "#9b6dff",
+  moss: "#4d6a3a",
+  lime: "#a9cf45",
+} as const;
+
+/**
+ * The nummo mark: a coin cut into four bands of the signal colours, like
+ * balances stacked in a ledger. Reads at 16px; no gradients.
+ */
 export function LogoMark({ className, ...props }: React.ComponentProps<"svg">) {
+  const id = `nummo-coin-${useId().replace(/:/g, "")}`;
   return (
-    <svg viewBox="0 0 32 32" fill="none" aria-hidden="true" className={cn("size-6", className)} {...props}>
-      <defs>
-        <linearGradient id="nummo-g" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#9945FF" />
-          <stop offset="0.55" stopColor="#00C2FF" />
-          <stop offset="1" stopColor="#14F195" />
-        </linearGradient>
-      </defs>
-      <path d="M8 6h20l-4 5H4z" fill="url(#nummo-g)" />
-      <path d="M4 13.5h20l4 5H8z" fill="url(#nummo-g)" opacity=".85" />
-      <path d="M8 21h20l-4 5H4z" fill="url(#nummo-g)" />
+    <svg aria-hidden="true" className={cn("size-6", className)} fill="none" viewBox="0 0 32 32" {...props}>
+      <clipPath id={id}>
+        <circle cx="16" cy="16" r="14" />
+      </clipPath>
+      <g clipPath={`url(#${id})`}>
+        <rect fill={PALETTE.cobalt} height="6.25" width="32" y="2" />
+        <rect fill={PALETTE.tangerine} height="6.25" width="32" y="9.25" />
+        <rect fill={PALETTE.marigold} height="6.25" width="32" y="16.5" />
+        <rect fill={PALETTE.iris} height="6.25" width="32" y="23.75" />
+      </g>
     </svg>
   );
 }
 
 export function Logo({ className }: { className?: string }) {
   return (
-    <span className={cn("inline-flex items-center gap-2 font-display font-semibold text-lg tracking-tight", className)}>
-      <LogoMark />
+    <span className={cn("inline-flex items-center gap-2 font-sans font-semibold text-[1.35rem] leading-none tracking-[-0.04em]", className)}>
+      <LogoMark className="size-[1.1em]" />
       nummo
     </span>
   );
@@ -31,7 +46,7 @@ export function Logo({ className }: { className?: string }) {
 export function FullPageSpinner() {
   return (
     <div className="grid min-h-svh place-items-center">
-      <LogoMark className="size-8 animate-pulse" />
+      <LogoMark className="size-8 animate-spin [animation-duration:1.6s]" />
     </div>
   );
 }

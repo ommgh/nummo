@@ -37,7 +37,7 @@ export function BillingHealth({ o }: { o: Overview }) {
           <Empty>
             <EmptyHeader>
               <EmptyMedia variant="icon">
-                <CheckCircleIcon aria-hidden="true" className="text-sol-green" />
+                <CheckCircleIcon aria-hidden="true" className="text-success" weight="fill" />
               </EmptyMedia>
               <EmptyTitle className="font-heading">You're caught up.</EmptyTitle>
               <EmptyDescription className="text-xs">No one past due, and every webhook was delivered.</EmptyDescription>

@@ -17,7 +17,7 @@ export const CHECKOUT_PAGE = /* html */ `<!doctype html>
 <style>
 ${BASE_CSS}
   main { max-width: 440px; margin: 0 auto; padding: 32px 16px 48px; }
-  h1 { font-size: 22px; margin: 4px 0 16px; }
+  h1 { font-size: 28px; margin: 8px 0 16px; }
   .wallets { display: grid; gap: 8px; }
 </style>
 </head>

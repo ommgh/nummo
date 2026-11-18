@@ -14,7 +14,7 @@ function highlight(code: string) {
   while ((m = re.exec(code))) {
     if (m.index > last) out.push(code.slice(last, m.index));
     const [t, comment, str, num, fn, word] = m;
-    const cls = comment ? "text-muted-foreground italic" : str ? "text-sol-green" : num ? "text-warning" : fn ? "text-sol-blue" : word && KEYWORDS.has(word) ? "text-sol-purple" : "";
+    const cls = comment ? "text-muted-foreground" : str ? "text-lime" : num ? "text-tangerine" : fn ? "text-[#7aa5ff]" : word && KEYWORDS.has(word) ? "text-iris" : "";
     out.push(cls ? <span className={cls} key={i++}>{t}</span> : <Fragment key={i++}>{t}</Fragment>);
     last = m.index + t.length;
   }
@@ -27,15 +27,15 @@ export function CodeWindow({ tabs, className }: { tabs: { name: string; code: st
   const [copied, setCopied] = useState(false);
   const tab = tabs[active]!;
   return (
-    <div className={cn("overflow-hidden border bg-[#0a0a11]/90 text-left shadow-2xl shadow-sol-purple/10 backdrop-blur", className)}>
+    <div className={cn("dark grain grain-soft overflow-hidden bg-background text-left text-foreground", className)}>
       <div className="flex items-center justify-between border-b pr-2">
         <div className="flex" role="tablist">
           {tabs.map((t, i) => (
             <button
               aria-selected={i === active}
               className={cn(
-                "border-r px-4 py-2.5 text-xs transition-colors",
-                i === active ? "bg-background text-foreground shadow-[inset_0_-1px_0_var(--color-sol-green)]" : "text-muted-foreground hover:text-foreground",
+                "border-r px-4 py-3 font-mono text-[11px] uppercase tracking-[0.08em] transition-colors",
+                i === active ? "bg-card text-foreground shadow-[inset_0_-2px_0_var(--color-marigold)]" : "text-muted-foreground hover:text-foreground",
               )}
               key={t.name}
               onClick={() => setActive(i)}
@@ -56,10 +56,10 @@ export function CodeWindow({ tabs, className }: { tabs: { name: string; code: st
           }}
           type="button"
         >
-          {copied ? <CheckIcon className="size-4 text-sol-green" /> : <CopyIcon className="size-4" />}
+          {copied ? <CheckIcon className="size-4 text-lime" /> : <CopyIcon className="size-4" />}
         </button>
       </div>
-      <pre className="overflow-x-auto p-5 text-[12.5px] leading-relaxed">
+      <pre className="overflow-x-auto p-5 font-mono text-[12.5px] leading-relaxed md:p-6">
         <code>{highlight(tab.code)}</code>
       </pre>
     </div>

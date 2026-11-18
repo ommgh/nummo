@@ -9,9 +9,9 @@ import { useSession } from "@/dashboard/session";
 
 export function PageHeader({ title, description, actions }: { title: ReactNode; description?: ReactNode; actions?: ReactNode }) {
   return (
-    <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-      <div className="min-w-0 space-y-1">
-        <h1 className="font-display font-semibold text-2xl tracking-tight">{title}</h1>
+    <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+      <div className="min-w-0 space-y-2">
+        <h1 className="font-medium text-3xl tracking-[-0.035em] md:text-4xl">{title}</h1>
         {description && <p className="max-w-2xl text-pretty text-muted-foreground text-sm">{description}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
@@ -45,16 +45,16 @@ export function StatusBadge({ status, className }: { status: string; className?:
   return (
     <Badge
       className={cn(
-        "gap-1.5 border-none font-normal capitalize",
-        tone === "ok" && "bg-sol-green/10 text-sol-green",
-        tone === "warn" && "bg-warning/10 text-warning",
-        tone === "bad" && "bg-destructive/10 text-destructive",
+        "gap-1.5 border-none font-normal lowercase",
+        tone === "ok" && "bg-success/12 text-success",
+        tone === "warn" && "bg-marigold/25 text-warning",
+        tone === "bad" && "bg-tangerine/15 text-destructive",
         tone === "muted" && "bg-muted text-muted-foreground",
         className,
       )}
       variant="secondary"
     >
-      <span className="size-1.5 rounded-full bg-current" />
+      <span className="size-1.5 bg-current" />
       {status.replace(/_/g, " ")}
     </Badge>
   );
@@ -64,7 +64,7 @@ export function TxLink({ signature }: { signature: string }) {
   const { session } = useSession();
   return (
     <a
-      className="inline-flex items-center gap-1 font-mono text-muted-foreground text-xs hover:text-sol-green"
+      className="inline-flex items-center gap-1 font-mono text-muted-foreground text-xs hover:text-primary"
       href={explorerTx(signature, session.settlement?.network)}
       rel="noopener"
       target="_blank"
@@ -79,7 +79,7 @@ export function AddressLink({ address, className }: { address: string; className
   const { session } = useSession();
   return (
     <a
-      className={cn("inline-flex items-center gap-1 font-mono text-xs hover:text-sol-green", className)}
+      className={cn("inline-flex items-center gap-1 font-mono text-xs hover:text-primary", className)}
       href={explorerAddress(address, session.settlement?.network)}
       rel="noopener"
       target="_blank"
@@ -103,7 +103,7 @@ export function CopyButton({ value, label = "Copy" }: { value: string; label?: s
       size="icon-sm"
       variant="ghost"
     >
-      {done ? <CheckIcon className="text-sol-green" /> : <CopyIcon />}
+      {done ? <CheckIcon className="text-success" /> : <CopyIcon />}
     </Button>
   );
 }
@@ -135,7 +135,12 @@ export function ErrorNote({ error, onRetry }: { error: Error; onRetry?: () => vo
 export function EmptyNote({ title, children, icon }: { title: string; children?: ReactNode; icon?: ReactNode }) {
   return (
     <div className="flex flex-col items-center justify-center gap-2 px-6 py-14 text-center">
-      {icon && <div className="mb-1 grid size-10 place-items-center border bg-muted/40 text-muted-foreground [&_svg]:size-5">{icon}</div>}
+      {icon && (
+        <div className="relative mb-2 grid size-12 place-items-center border bg-card text-foreground [&_svg]:size-5">
+          <span className="absolute -top-1 -right-1 size-2.5 bg-marigold" />
+          {icon}
+        </div>
+      )}
       <p className="font-medium text-sm">{title}</p>
       {children && <div className="max-w-md text-pretty text-muted-foreground text-xs leading-relaxed">{children}</div>}
     </div>
@@ -145,12 +150,12 @@ export function EmptyNote({ title, children, icon }: { title: string; children?:
 /** A bordered panel with a title row, in the dashboard-2 style. */
 export function Panel({ title, description, actions, children, className }: { title?: ReactNode; description?: ReactNode; actions?: ReactNode; children: ReactNode; className?: string }) {
   return (
-    <section className={cn("border bg-card/40", className)}>
+    <section className={cn("border bg-card", className)}>
       {(title || actions) && (
         <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 md:px-5">
           <div className="min-w-0">
-            {title && <h2 className="font-medium text-sm">{title}</h2>}
-            {description && <p className="text-muted-foreground text-xs">{description}</p>}
+            {title && <h2 className="font-medium text-[15px] tracking-tight">{title}</h2>}
+            {description && <p className="text-[13px] text-muted-foreground">{description}</p>}
           </div>
           {actions}
         </div>
@@ -165,7 +170,7 @@ export function Usdc({ value, className }: { value: string; className?: string }
   return (
     <span className={cn("tabular-nums", className)}>
       {Number.isFinite(n) ? n.toLocaleString("en-US", { maximumFractionDigits: 6 }) : value}
-      <span className="ml-1 text-[0.8em] text-muted-foreground">USDC</span>
+      <span className="ml-1 font-mono text-[0.72em] text-muted-foreground tracking-wide">USDC</span>
     </span>
   );
 }

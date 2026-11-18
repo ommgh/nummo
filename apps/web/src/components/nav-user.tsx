@@ -30,7 +30,7 @@ export function NavUser() {
         <button aria-label="Account" className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <Avatar className="size-8">
             {user.image && <AvatarImage src={user.image} />}
-            <AvatarFallback className="bg-gradient-sol font-semibold text-[#04130c]">{initials}</AvatarFallback>
+            <AvatarFallback className="bg-marigold font-semibold text-ink">{initials}</AvatarFallback>
           </Avatar>
         </button>
       </DropdownMenuTrigger>

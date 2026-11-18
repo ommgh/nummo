@@ -77,7 +77,7 @@ export function PlansPage() {
                           <span className="text-muted-foreground text-xs">not needed</span>
                         ) : v.published ? (
                           <span className="inline-flex items-center gap-1.5">
-                            <SealCheckIcon className="size-4 text-sol-green" weight="fill" />
+                            <SealCheckIcon className="size-4 text-success" weight="fill" />
                             <AddressLink address={v.published.address} />
                           </span>
                         ) : data.settlement ? (

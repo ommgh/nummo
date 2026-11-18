@@ -9,18 +9,18 @@ export function EnvSwitch() {
     <button
       aria-pressed={env === value}
       className={cn(
-        "flex items-center gap-1.5 px-2.5 py-1 text-[11px] uppercase tracking-wider transition-colors",
-        env === value ? (value === "live" ? "bg-sol-green/15 text-sol-green" : "bg-warning/15 text-warning") : "text-muted-foreground hover:text-foreground",
+        "flex items-center gap-1.5 rounded-full px-3 py-1 font-mono text-[10.5px] uppercase tracking-[0.08em] transition-colors",
+        env === value ? (value === "live" ? "bg-cobalt text-white" : "bg-marigold text-ink") : "text-muted-foreground hover:text-foreground",
       )}
       onClick={() => setEnv(value)}
       type="button"
     >
-      <span className={cn("size-1.5 rounded-full", value === "live" ? "bg-sol-green" : "bg-warning", env !== value && "opacity-40")} />
+      <span className={cn("size-1.5", env === value ? "bg-current" : value === "live" ? "bg-cobalt" : "bg-marigold")} />
       {label}
     </button>
   );
   return (
-    <div className="flex border" role="group" aria-label="Environment">
+    <div aria-label="Environment" className="flex rounded-full border p-0.5" role="group">
       {option("test", "Test")}
       {option("live", "Live")}
     </div>

@@ -30,7 +30,7 @@ function LegalPage({ title, children }: { title: string; children: ReactNode }) 
   return (
     <div className="min-h-svh bg-background font-sans">
       <header className="border-b">
-        <div className="mx-auto flex max-w-6xl items-center justify-between border-x px-5 py-4 md:px-10">
+        <div className="mx-auto flex max-w-[88rem] items-center justify-between px-4 py-4 md:px-6">
           <Link to="/">
             <Logo />
           </Link>
@@ -44,18 +44,19 @@ function LegalPage({ title, children }: { title: string; children: ReactNode }) 
           </nav>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl border-x px-5 py-14 md:px-10">
+      <main className="mx-auto max-w-[88rem] px-5 py-16 md:px-10 md:py-24">
         <article className="mx-auto max-w-2xl">
-          <h1 className="font-display font-semibold text-3xl tracking-tight md:text-4xl">{title}</h1>
-          <p className="mt-3 text-muted-foreground text-sm">Effective {LEGAL.effective}</p>
-          <div className="legal mt-10 grid gap-8 text-[15px] leading-7 [&_a]:underline [&_a]:underline-offset-4 [&_a:hover]:text-sol-green [&_h2]:mb-3 [&_h2]:font-display [&_h2]:font-semibold [&_h2]:text-foreground [&_h2]:text-xl [&_li]:mt-1.5 [&_p+p]:mt-3 [&_p]:text-muted-foreground [&_li]:text-muted-foreground [&_strong]:text-foreground [&_ul]:mt-3 [&_ul]:list-disc [&_ul]:pl-5">
+          <p className="label-mono flex items-center gap-2 text-muted-foreground">
+            <span className="size-2 bg-cobalt" />
+            Effective {LEGAL.effective}
+          </p>
+          <h1 className="mt-5 font-medium text-4xl tracking-[-0.035em] md:text-6xl">{title}</h1>
+          <div className="legal mt-10 grid gap-8 text-[15px] leading-7 [&_a]:underline [&_a]:underline-offset-4 [&_a:hover]:text-primary [&_h2]:mb-3 [&_h2]:font-medium [&_h2]:tracking-tight [&_h2]:text-foreground [&_h2]:text-xl [&_li]:mt-1.5 [&_p+p]:mt-3 [&_p]:text-muted-foreground [&_li]:text-muted-foreground [&_strong]:text-foreground [&_ul]:mt-3 [&_ul]:list-disc [&_ul]:pl-5">
             {children}
           </div>
         </article>
       </main>
-      <div className="border-t">
-        <Footer />
-      </div>
+      <Footer />
     </div>
   );
 }

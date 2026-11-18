@@ -31,7 +31,7 @@ export function SignInPage() {
       footer={
         <>
           New to nummo?{" "}
-          <Link className="text-foreground underline underline-offset-4 hover:text-sol-green" to={`/sign-up${params.get("next") ? `?next=${encodeURIComponent(next)}` : ""}`}>
+          <Link className="text-foreground underline underline-offset-4 hover:text-primary" to={`/sign-up${params.get("next") ? `?next=${encodeURIComponent(next)}` : ""}`}>
             Create an account
           </Link>
         </>
@@ -39,7 +39,7 @@ export function SignInPage() {
       subtitle="Sign in to your billing dashboard."
       title="Welcome back"
     >
-      {params.get("reset") && <p className="mb-4 rounded-md border border-sol-green/40 bg-sol-green/10 px-3 py-2 text-xs">Password changed. Sign in with the new one.</p>}
+      {params.get("reset") && <p className="mb-4 border border-success/40 bg-success/10 px-3 py-2 text-[13px]">Password changed. Sign in with the new one.</p>}
       <SocialButtons next={next} />
       <form className="grid gap-4" onSubmit={submit}>
         <div className="grid gap-2">

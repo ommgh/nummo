@@ -40,7 +40,7 @@ export function PaymentsPage() {
                     <TableRow className="h-12" key={p.id}>
                       <TableCell className="ps-5 text-muted-foreground">{dateTime(p.createdAt)}</TableCell>
                       <TableCell>
-                        <Link className="hover:text-sol-green" to={`/dashboard/customers/${encodeURIComponent(p.customerId)}`}>
+                        <Link className="hover:text-primary" to={`/dashboard/customers/${encodeURIComponent(p.customerId)}`}>
                           {p.customerId}
                         </Link>
                       </TableCell>

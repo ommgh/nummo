@@ -13,12 +13,16 @@ export function LatestChange() {
         "transition-opacity group-data-[collapsible=icon]:pointer-events-none group-data-[collapsible=icon]:opacity-0",
       )}
     >
-      <div aria-hidden className="pointer-events-none absolute -top-10 -right-10 size-28 rounded-full bg-sol-purple/20 blur-2xl" />
-      <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-widest">Settlement</span>
+      <div aria-hidden className="pointer-events-none absolute top-3 right-3 flex gap-1">
+        <span className="size-1.5 bg-cobalt" />
+        <span className="size-1.5 bg-tangerine" />
+        <span className="size-1.5 bg-marigold" />
+      </div>
+      <span className="label-mono text-[10px] text-muted-foreground">Settlement</span>
       {s ? (
         <>
           <p className="flex items-center gap-1.5 font-medium text-xs">
-            <span className={cn("size-1.5 rounded-full", env === "live" ? "bg-sol-green" : "bg-warning")} />
+            <span className={cn("size-1.5", env === "live" ? "bg-lime" : "bg-marigold")} />
             USDC on Solana {s.network}
           </p>
           <span className="text-[10px] text-muted-foreground">puller {short(s.puller, 6, 4)}</span>

@@ -36,7 +36,7 @@ export function DashboardActivity({ o }: { o: Overview }) {
           <ul className="flex flex-col divide-y divide-border">
             {o.activity.slice(0, 5).map((item, i) => (
               <li className="flex h-16 items-center gap-3 px-6" key={`${item.type}-${item.createdAt}-${i}`}>
-                <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center border bg-muted/30 text-sol-purple [&_svg]:size-4">
+                <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center border bg-card text-foreground [&_svg]:size-4">
                   {iconFor(item.type)}
                 </span>
                 <div className="min-w-0 flex-1 space-y-1">

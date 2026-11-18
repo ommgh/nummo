@@ -65,17 +65,17 @@ const escape = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<":
 
 /** A plain message with one button. Inline styles only, since mail clients drop stylesheets. */
 function layout(p: { heading: string; lines: string[]; action: string; url: string; footer: string }): string {
-  const para = (t: string) => `<p style="margin:0 0 16px;font-size:14px;line-height:22px;color:#3f3f46">${escape(t)}</p>`;
-  return `<!doctype html><html><body style="margin:0;padding:32px 16px;background:#f4f4f5;font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif">
+  const para = (t: string) => `<p style="margin:0 0 16px;font-size:14px;line-height:22px;color:#3a3732">${escape(t)}</p>`;
+  return `<!doctype html><html><body style="margin:0;padding:32px 16px;background:#f2efe9;font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#ffffff;border:1px solid #e4e4e7;border-radius:8px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#f8f6f2;border:1px solid #d6d1c7;border-top:6px solid #1764ff">
 <tr><td style="padding:32px">
-<p style="margin:0 0 24px;font-family:Menlo,Consolas,monospace;font-size:16px;font-weight:700;color:#09090b">nummo</p>
-<h1 style="margin:0 0 16px;font-size:20px;line-height:28px;color:#09090b">${escape(p.heading)}</h1>
+<p style="margin:0 0 24px;font-size:18px;font-weight:700;letter-spacing:-0.5px;color:#1b1a19">nummo</p>
+<h1 style="margin:0 0 16px;font-size:22px;line-height:28px;font-weight:500;letter-spacing:-0.4px;color:#1b1a19">${escape(p.heading)}</h1>
 ${p.lines.map(para).join("\n")}
-<p style="margin:24px 0"><a href="${escape(p.url)}" style="display:inline-block;padding:10px 18px;background:#09090b;color:#ffffff;text-decoration:none;border-radius:6px;font-size:14px;font-weight:600">${escape(p.action)}</a></p>
-<p style="margin:0 0 8px;font-size:12px;line-height:18px;color:#71717a">Or paste this link into your browser:<br><span style="word-break:break-all">${escape(p.url)}</span></p>
-<p style="margin:16px 0 0;font-size:12px;line-height:18px;color:#71717a">${escape(p.footer)}</p>
+<p style="margin:24px 0"><a href="${escape(p.url)}" style="display:inline-block;padding:10px 18px;background:#1764ff;color:#ffffff;text-decoration:none;border-radius:999px;font-size:14px;font-weight:600">${escape(p.action)}</a></p>
+<p style="margin:0 0 8px;font-size:12px;line-height:18px;color:#6b665d">Or paste this link into your browser:<br><span style="word-break:break-all">${escape(p.url)}</span></p>
+<p style="margin:16px 0 0;font-size:12px;line-height:18px;color:#6b665d">${escape(p.footer)}</p>
 </td></tr></table></td></tr></table></body></html>`;
 }
 

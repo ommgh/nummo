@@ -1,26 +1,40 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/jetbrains-mono";
-@import "@fontsource-variable/space-grotesk";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
 
 @custom-variant dark (&:is(.dark *));
 
 /*
- * nummo: Solana's colours on near-black. Green (#14F195) is the action colour,
- * purple (#9945FF) the accent, and the two together form the brand gradient.
- * JetBrains Mono for the product, Space Grotesk for display headings.
+ * nummo, second edition.
+ *
+ * Warm paper and charcoal ink, with five flat signal colours: cobalt,
+ * tangerine, marigold, iris and moss. Colour arrives in solid blocks and
+ * beams, never in gradients. Everything carries a fine film grain.
+ * Geist for words, Geist Mono for labels, numbers and code.
+ *
+ * Light (paper) is the default. Any element with `.dark` flips its subtree
+ * to ink, which is how the website alternates panels and how the sidebar
+ * stays dark in a light dashboard.
  */
 @theme inline {
-    --font-sans: 'JetBrains Mono Variable', ui-monospace, monospace;
-    --font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
-    --font-heading: var(--font-mono);
-    --font-display: 'Space Grotesk Variable', ui-sans-serif, system-ui, sans-serif;
-    --color-sol-green: #14f195;
-    --color-sol-purple: #9945ff;
-    --color-sol-teal: #19fb9b;
-    --color-sol-blue: #00c2ff;
-    --color-sol-pink: #dc1fff;
+    --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+    --font-mono: 'Geist Mono Variable', ui-monospace, SFMono-Regular, monospace;
+    --font-heading: var(--font-sans);
+    --font-display: var(--font-sans);
+
+    --color-ink: #1b1a19;
+    --color-ink-2: #121212;
+    --color-paper: #f2efe9;
+    --color-paper-2: #e8e4dc;
+    --color-cobalt: #1764ff;
+    --color-tangerine: #ff5a1f;
+    --color-marigold: #ffae0a;
+    --color-iris: #9b6dff;
+    --color-moss: #4d6a3a;
+    --color-lime: #a9cf45;
+
     --color-success: var(--success);
     --color-warning: var(--warning);
     --color-sidebar-ring: var(--sidebar-ring);
@@ -62,83 +76,86 @@
     --radius-3xl: calc(var(--radius) * 2.2);
     --radius-4xl: calc(var(--radius) * 2.6);
     --animate-marquee: marquee 40s linear infinite;
-    --animate-shimmer: shimmer 3s linear infinite;
+    --animate-flow: flow 2.4s linear infinite;
+    --animate-float: float 6s ease-in-out infinite;
     @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-    @keyframes shimmer { from { background-position: 0% 50%; } to { background-position: 200% 50%; } }
+    @keyframes flow { from { stroke-dashoffset: 24; } to { stroke-dashoffset: 0; } }
+    @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
 }
 
-/* Light: kept for completeness; the product ships dark. */
 :root {
-    --background: oklch(0.99 0.003 300);
-    --foreground: oklch(0.17 0.02 290);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.17 0.02 290);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.17 0.02 290);
-    --primary: oklch(0.52 0.25 295);
-    --primary-foreground: oklch(0.99 0 0);
-    --secondary: oklch(0.96 0.01 300);
-    --secondary-foreground: oklch(0.2 0.02 290);
-    --muted: oklch(0.96 0.01 300);
-    --muted-foreground: oklch(0.5 0.02 290);
-    --accent: oklch(0.95 0.03 300);
-    --accent-foreground: oklch(0.3 0.12 295);
-    --destructive: oklch(0.58 0.22 25);
-    --success: oklch(0.6 0.15 160);
-    --warning: oklch(0.7 0.15 75);
-    --border: oklch(0.91 0.01 300);
-    --input: oklch(0.91 0.01 300);
-    --ring: oklch(0.52 0.25 295);
-    --chart-1: oklch(0.6 0.15 160);
-    --chart-2: oklch(0.52 0.25 295);
-    --chart-3: oklch(0.65 0.15 230);
-    --chart-4: oklch(0.6 0.25 320);
-    --chart-5: oklch(0.75 0.15 75);
+    --background: #f2efe9;
+    --foreground: #1b1a19;
+    --card: #f8f6f2;
+    --card-foreground: #1b1a19;
+    --popover: #fbfaf7;
+    --popover-foreground: #1b1a19;
+    --primary: #1764ff;
+    --primary-foreground: #ffffff;
+    --secondary: #e8e4dc;
+    --secondary-foreground: #1b1a19;
+    --muted: #e8e4dc;
+    --muted-foreground: #6b665d;
+    --accent: #e4ddcf;
+    --accent-foreground: #1b1a19;
+    --destructive: #d93a12;
+    --success: #3d7a2c;
+    --warning: #a86800;
+    --border: rgb(27 26 25 / 0.14);
+    --input: rgb(27 26 25 / 0.2);
+    --ring: #1764ff;
+    --chart-1: #1764ff;
+    --chart-2: #ff5a1f;
+    --chart-3: #ffae0a;
+    --chart-4: #9b6dff;
+    --chart-5: #4d6a3a;
     --radius: 0rem;
-    --sidebar: oklch(0.98 0.005 300);
-    --sidebar-foreground: oklch(0.17 0.02 290);
-    --sidebar-primary: oklch(0.52 0.25 295);
-    --sidebar-primary-foreground: oklch(0.99 0 0);
-    --sidebar-accent: oklch(0.95 0.02 300);
-    --sidebar-accent-foreground: oklch(0.2 0.02 290);
-    --sidebar-border: oklch(0.91 0.01 300);
-    --sidebar-ring: oklch(0.52 0.25 295);
+    --grain-opacity: 0.07;
+    --sidebar: #1b1a19;
+    --sidebar-foreground: #f2efe9;
+    --sidebar-primary: #1764ff;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #2a2927;
+    --sidebar-accent-foreground: #f2efe9;
+    --sidebar-border: rgb(242 239 233 / 0.1);
+    --sidebar-ring: #1764ff;
 }
 
 .dark {
-    --background: #07070b;
-    --foreground: #ecebf3;
-    --card: #0c0c13;
-    --card-foreground: #ecebf3;
-    --popover: #0f0f18;
-    --popover-foreground: #ecebf3;
-    --primary: #14f195;
-    --primary-foreground: #04130c;
-    --secondary: #16161f;
-    --secondary-foreground: #ecebf3;
-    --muted: #13131b;
-    --muted-foreground: #8d8b9f;
-    --accent: #1b1430;
-    --accent-foreground: #c9a8ff;
-    --destructive: #ff5c7a;
-    --success: #14f195;
-    --warning: #ffc147;
-    --border: rgb(255 255 255 / 0.08);
-    --input: rgb(255 255 255 / 0.12);
-    --ring: #9945ff;
-    --chart-1: #14f195;
-    --chart-2: #9945ff;
-    --chart-3: #00c2ff;
-    --chart-4: #dc1fff;
-    --chart-5: #ffc147;
-    --sidebar: #08080d;
-    --sidebar-foreground: #ecebf3;
-    --sidebar-primary: #14f195;
-    --sidebar-primary-foreground: #04130c;
-    --sidebar-accent: #15151f;
-    --sidebar-accent-foreground: #ecebf3;
-    --sidebar-border: rgb(255 255 255 / 0.08);
-    --sidebar-ring: #9945ff;
+    --background: #1b1a19;
+    --foreground: #f2efe9;
+    --card: #222120;
+    --card-foreground: #f2efe9;
+    --popover: #262523;
+    --popover-foreground: #f2efe9;
+    --primary: #2f74ff;
+    --primary-foreground: #ffffff;
+    --secondary: #2a2927;
+    --secondary-foreground: #f2efe9;
+    --muted: #2a2927;
+    --muted-foreground: #a39e94;
+    --accent: #33312e;
+    --accent-foreground: #f2efe9;
+    --destructive: #ff6a3d;
+    --success: #a9cf45;
+    --warning: #ffb726;
+    --border: rgb(242 239 233 / 0.12);
+    --input: rgb(242 239 233 / 0.16);
+    --ring: #5a8fff;
+    --chart-1: #2f74ff;
+    --chart-2: #ff5a1f;
+    --chart-3: #ffae0a;
+    --chart-4: #9b6dff;
+    --chart-5: #a9cf45;
+    --grain-opacity: 0.12;
+    --sidebar: #141413;
+    --sidebar-foreground: #f2efe9;
+    --sidebar-primary: #2f74ff;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #252422;
+    --sidebar-accent-foreground: #f2efe9;
+    --sidebar-border: rgb(242 239 233 / 0.09);
+    --sidebar-ring: #5a8fff;
 }
 
 @layer base {
@@ -146,36 +163,82 @@
     @apply border-border outline-ring/50;
   }
   html {
-    @apply font-mono;
+    @apply font-sans;
+    color-scheme: light;
+    font-feature-settings: "ss01", "cv11";
+  }
+  html.dark {
     color-scheme: dark;
   }
   body {
     @apply bg-background text-foreground antialiased;
   }
+  /* Film grain over the whole page. Static, so it costs one composited layer. */
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 2147483000;
+    pointer-events: none;
+    background-image: var(--grain-url);
+    background-size: 200px 200px;
+    opacity: var(--grain-opacity);
+  }
+  code, kbd, pre, samp {
+    @apply font-mono;
+  }
   button:not(:disabled), [role="button"]:not(:disabled) {
     cursor: pointer;
   }
   ::selection {
-    background: color-mix(in oklab, var(--color-sol-purple) 45%, transparent);
+    background: var(--color-marigold);
+    color: var(--color-ink);
   }
 }
 
+:root {
+  /* Monochrome fractal noise; black specks with alpha, so it reads on paper and on ink. */
+  --grain-url: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -1.6 1.25'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E");
+  /* The same noise as light specks, for colour blocks. */
+  --grain-light-url: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1.7 -0.95'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
 @layer utilities {
-  .text-gradient {
-    background: linear-gradient(90deg, var(--color-sol-purple), var(--color-sol-blue) 50%, var(--color-sol-green));
-    background-size: 200% auto;
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+  /* Heavier grain for solid colour blocks: dark and light specks both. */
+  .grain {
+    position: relative;
+    isolation: isolate;
   }
-  .bg-gradient-sol {
-    background: linear-gradient(90deg, var(--color-sol-purple), var(--color-sol-green));
+  .grain::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image: var(--grain-url), var(--grain-light-url);
+    background-size: 180px 180px, 240px 240px;
+    opacity: 0.16;
   }
-  .bg-grid {
+  .grain-soft::before {
+    opacity: 0.1;
+  }
+  /* Small uppercase mono label, the system's "tag" voice. */
+  .label-mono {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.2;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .dot-grid {
+    background-image: radial-gradient(currentColor 1px, transparent 1.4px);
+    background-size: 14px 14px;
+  }
+  .perspective-grid {
     background-image:
-      linear-gradient(to right, rgb(255 255 255 / 0.04) 1px, transparent 1px),
-      linear-gradient(to bottom, rgb(255 255 255 / 0.04) 1px, transparent 1px);
-    background-size: 48px 48px;
+      linear-gradient(to right, color-mix(in oklab, currentColor 14%, transparent) 1px, transparent 1px),
+      linear-gradient(to bottom, color-mix(in oklab, currentColor 14%, transparent) 1px, transparent 1px);
+    background-size: 56px 56px;
   }
 }
 

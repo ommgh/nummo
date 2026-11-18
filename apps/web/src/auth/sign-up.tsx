@@ -33,7 +33,7 @@ export function SignUpPage() {
       footer={
         <>
           Already have an account?{" "}
-          <Link className="text-foreground underline underline-offset-4 hover:text-sol-green" to="/sign-in">
+          <Link className="text-foreground underline underline-offset-4 hover:text-primary" to="/sign-in">
             Sign in
           </Link>
         </>

@@ -17,24 +17,24 @@ export const PORTAL_PAGE = /* html */ `<!doctype html>
 ${BASE_CSS}
   main { max-width: 760px; margin: 0 auto; padding: 28px 16px 48px; display: grid; gap: 16px; }
   header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-  header h1 { font-size: 22px; margin: 0; }
+  header h1 { font-size: 32px; margin: 2px 0 0; }
   h2 { font-size: 16px; margin: 0 0 12px; }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
-  .plan { border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: grid; gap: 6px; align-content: start; }
-  .plan.current { border-color: var(--accent); }
+  .plan { border: 1px solid var(--line); border-radius: 0; background: var(--bg); padding: 14px; display: grid; gap: 6px; align-content: start; }
+  .plan.current { border-color: var(--accent); box-shadow: inset 0 3px 0 var(--accent); }
   .plan .chip { justify-self: start; }
-  .plan .price { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
-  .bar { height: 8px; background: var(--track); border-radius: 999px; overflow: hidden; margin: 6px 0 4px; }
+  .plan .price { font-size: 22px; font-weight: 500; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+  .bar { height: 8px; background: var(--track); border-radius: 0; overflow: hidden; margin: 6px 0 4px; }
   .bar > span { display: block; height: 100%; background: var(--accent); }
   .usage { display: grid; gap: 14px; }
   .usage .top { display: flex; justify-content: space-between; gap: 8px; font-variant-numeric: tabular-nums; }
   table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
   th, td { text-align: left; padding: 8px 6px; border-top: 1px solid var(--line); vertical-align: top; }
-  th { color: var(--muted); font-weight: 500; font-size: 13px; border-top: 0; }
+  th { color: var(--muted); font: 400 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .08em; text-transform: uppercase; border-top: 0; }
   td.num, th.num { text-align: right; }
   .wallets { display: grid; gap: 8px; margin-top: 12px; }
-  .notice { background: var(--chip); border-radius: 10px; padding: 10px 12px; margin: 12px 0 0; }
+  .notice { background: var(--chip); border-left: 3px solid var(--marigold); border-radius: 0; padding: 10px 12px; margin: 12px 0 0; }
   .scroll { overflow-x: auto; }
   @media (max-width: 520px) { dl { grid-template-columns: 1fr; } dd { text-align: left; } }
 </style>

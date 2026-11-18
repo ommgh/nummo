@@ -27,13 +27,13 @@ export function UsagePage() {
             <div className="grid grid-cols-2 gap-px border bg-border md:grid-cols-3 xl:grid-cols-6">
               {data.features.map((f) => (
                 <button
-                  className={cn("bg-background p-4 text-left transition-colors hover:bg-muted/30", feature === f.featureId && "bg-muted/40 ring-1 ring-sol-green ring-inset")}
+                  className={cn("bg-background p-4 text-left transition-colors hover:bg-muted/30", feature === f.featureId && "bg-muted/40 shadow-[inset_0_-3px_0_var(--color-cobalt)]")}
                   key={f.featureId}
                   onClick={() => setParams(feature === f.featureId ? {} : { feature: f.featureId })}
                   type="button"
                 >
                   <div className="truncate text-muted-foreground text-xs">{f.featureId}</div>
-                  <div className="font-display font-semibold text-2xl tabular-nums">{compact(f.total)}</div>
+                  <div className="font-medium text-3xl tabular-nums tracking-tight">{compact(f.total)}</div>
                   <div className="text-[11px] text-muted-foreground">{f.events.toLocaleString()} events · 30 days</div>
                 </button>
               ))}
@@ -71,7 +71,7 @@ export function UsagePage() {
                       <TableRow key={e.id ?? i}>
                         <TableCell className="ps-5 text-muted-foreground">{dateTime(e.occurredAt)}</TableCell>
                         <TableCell>
-                          <Link className="hover:text-sol-green" to={`/dashboard/customers/${encodeURIComponent(e.customerId)}`}>
+                          <Link className="hover:text-primary" to={`/dashboard/customers/${encodeURIComponent(e.customerId)}`}>
                             {e.customerId}
                           </Link>
                         </TableCell>

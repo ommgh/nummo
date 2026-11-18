@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
 import { AuthLayout } from "./layout";
 
-const linkClass = "text-foreground underline underline-offset-4 hover:text-sol-green";
+const linkClass = "text-foreground underline underline-offset-4 hover:text-primary";
 
 /** Step 1: ask for a reset link. The answer is the same whether or not the address has an account. */
 export function ForgotPasswordPage() {

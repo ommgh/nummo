@@ -17,7 +17,7 @@ export function NavGroup({ label, items, pathname }: SidebarNavGroup & { pathnam
       <SidebarMenu>
         {items.map((item) => (
           <SidebarMenuItem key={item.title}>
-            <SidebarMenuButton asChild isActive={isActivePath(item.path, pathname)} tooltip={item.title}>
+            <SidebarMenuButton asChild className="data-active:shadow-[inset_3px_0_0_var(--color-marigold)]" isActive={isActivePath(item.path, pathname)} tooltip={item.title}>
               <Link onClick={() => setOpenMobile(false)} to={item.path ?? "#"}>
                 {item.icon}
                 <span>{item.title}</span>

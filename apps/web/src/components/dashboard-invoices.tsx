@@ -35,7 +35,7 @@ export function RecentPayments({ payments }: { payments: Payment[] }) {
               {payments.slice(0, 6).map((p) => (
                 <TableRow className="h-12" key={p.id}>
                   <TableCell className="max-w-40 truncate ps-6 font-medium">
-                    <Link className="hover:text-sol-green" to={`/dashboard/customers/${encodeURIComponent(p.customerId)}`}>
+                    <Link className="hover:text-primary" to={`/dashboard/customers/${encodeURIComponent(p.customerId)}`}>
                       {p.customerId}
                     </Link>
                     <div className="text-[11px] text-muted-foreground">{ago(p.createdAt)}</div>

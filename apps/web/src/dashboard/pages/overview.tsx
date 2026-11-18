@@ -8,6 +8,7 @@ import type { ApiKey, Overview, PlanVersion } from "@/lib/types";
 import { useSession } from "@/dashboard/session";
 import { ErrorNote, PageHeader } from "@/dashboard/ui";
 import { cn } from "@/lib/utils";
+import { ConvergeArt } from "@/components/graphics";
 
 export function OverviewPage() {
   const { session, env } = useSession();
@@ -64,23 +65,31 @@ function GettingStarted() {
     { done: false, title: "Charge your first customer", body: "attach() returns a checkout link; the customer signs with their wallet.", href: "https://github.com/ommgh/nummo/blob/master/docs/guide/quickstart.md" },
   ];
   return (
-    <section className="relative mb-6 overflow-hidden border bg-card/40 p-5 md:p-6">
-      <div aria-hidden className="pointer-events-none absolute -top-24 right-0 h-48 w-96 bg-sol-purple/15 blur-3xl" />
-      <h2 className="font-display font-semibold text-lg">Get set up</h2>
-      <p className="mb-5 text-muted-foreground text-sm">Four steps from zero to your first on-chain charge. About 30 minutes on devnet.</p>
-      <ol className="grid gap-px border bg-border sm:grid-cols-2 lg:grid-cols-4">
+    <section className="dark grain grain-soft relative mb-6 overflow-hidden border bg-background p-5 text-foreground md:p-7">
+      <div className="mb-6 flex items-end justify-between gap-6">
+        <div>
+          <p className="label-mono flex items-center gap-2 text-muted-foreground">
+            <span className="size-2 bg-marigold" />
+            Getting started
+          </p>
+          <h2 className="mt-3 font-medium text-3xl tracking-[-0.03em]">Get set up</h2>
+          <p className="mt-1 text-muted-foreground text-sm">Four steps from zero to your first on-chain charge. About 30 minutes on devnet.</p>
+        </div>
+        <ConvergeArt className="pointer-events-none hidden h-24 w-80 shrink-0 lg:block" />
+      </div>
+      <ol className="relative grid gap-px border bg-border sm:grid-cols-2 lg:grid-cols-4">
         {steps.map((s, i) => {
           const inner = (
             <>
               <div className="flex items-center gap-2 text-xs">
-                {s.done ? <CheckCircleIcon className="size-4 text-sol-green" weight="fill" /> : <CircleIcon className="size-4 text-muted-foreground" />}
-                <span className="text-muted-foreground">Step {i + 1}</span>
+                {s.done ? <CheckCircleIcon className="size-4 text-lime" weight="fill" /> : <CircleIcon className="size-4 text-muted-foreground" />}
+                <span className="label-mono text-muted-foreground">Step 0{i + 1}</span>
               </div>
               <p className={cn("font-medium text-sm", s.done && "text-muted-foreground line-through")}>{s.title}</p>
               <p className="text-muted-foreground text-xs leading-relaxed">{s.body}</p>
             </>
           );
-          const cls = "flex h-full flex-col gap-2 bg-background p-4 transition-colors hover:bg-muted/30";
+          const cls = "flex h-full flex-col gap-2 bg-background p-4 transition-colors hover:bg-card";
           return (
             <li key={s.title}>
               {s.to ? (

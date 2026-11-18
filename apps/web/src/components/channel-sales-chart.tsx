@@ -1,4 +1,3 @@
-import { useId } from "react";
 import { CartesianGrid, Line, LineChart, XAxis } from "recharts";
 import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { type ChartConfig, ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
@@ -14,8 +13,6 @@ const keyOf = (f: string) => `f_${f.replace(/[^a-zA-Z0-9_]/g, "_")}`;
 
 /** Usage per feature per day: the dashboard-2 "channel sales" chart, fed by usage events. */
 export function UsageChart({ u, days = 14 }: { u: UsageDaily; days?: number }) {
-  const uid = useId().replace(/:/g, "");
-  const glow = `usage-glow-${uid}`;
   const rows = u.series.slice(-days).map((r) => ({ day: r.day, ...Object.fromEntries(u.features.map((f) => [keyOf(f), Number(r.values[f] ?? 0)])) }));
   const config = Object.fromEntries(u.features.map((f, i) => [keyOf(f), { label: f, color: COLORS[i % COLORS.length] }])) satisfies ChartConfig;
   return (
@@ -36,14 +33,8 @@ export function UsageChart({ u, days = 14 }: { u: UsageDaily; days?: number }) {
               <XAxis axisLine={false} dataKey="day" interval={2} tickFormatter={(v) => dayLabel(String(v))} tickLine={false} tickMargin={8} />
               <ChartTooltip content={<ChartTooltipContent labelFormatter={(_, p) => dayLabel(String(p?.[0]?.payload?.day ?? ""))} />} cursor={false} />
               <ChartLegend content={<ChartLegendContent />} />
-              <defs>
-                <filter height="140%" id={glow} width="140%" x="-20%" y="-20%">
-                  <feGaussianBlur result="blur" stdDeviation="8" />
-                  <feComposite in="SourceGraphic" in2="blur" operator="over" />
-                </filter>
-              </defs>
               {u.features.map((f) => (
-                <Line dataKey={keyOf(f)} dot={false} filter={`url(#${glow})`} key={f} stroke={`var(--color-${keyOf(f)})`} strokeWidth={2} type="step" />
+                <Line dataKey={keyOf(f)} dot={false} key={f} stroke={`var(--color-${keyOf(f)})`} strokeWidth={2.5} type="step" />
               ))}
             </LineChart>
           </ChartContainer>

@@ -113,7 +113,7 @@ export function CustomerPage() {
                           </span>
                         </div>
                         <div className="h-1.5 bg-muted">
-                          <div className="h-full bg-gradient-sol" style={{ width: `${pct}%` }} />
+                          <div className="h-full bg-cobalt" style={{ width: `${pct}%` }} />
                         </div>
                         <p className="text-[11px] text-muted-foreground">from {[...new Set(b.breakdown.map((g) => g.source))].join(", ") || "—"}</p>
                       </li>

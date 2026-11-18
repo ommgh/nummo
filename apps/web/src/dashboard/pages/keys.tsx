@@ -82,7 +82,7 @@ export function KeysPage() {
                     <TableRow className="h-12" key={k.id}>
                       <TableCell className="ps-5 font-mono text-xs">{k.prefix}…</TableCell>
                       <TableCell>
-                        <span className={k.env === "live" ? "text-sol-green" : "text-warning"}>{k.env === "live" ? "live · mainnet" : "test · devnet"}</span>
+                        <span className={k.env === "live" ? "text-success" : "text-warning"}>{k.env === "live" ? "live · mainnet" : "test · devnet"}</span>
                       </TableCell>
                       <TableCell className="text-muted-foreground">{dateTime(k.createdAt)}</TableCell>
                       <TableCell>{k.revokedAt ? <StatusBadge status="revoked" /> : <StatusBadge status="active" />}</TableCell>

@@ -70,7 +70,7 @@ export function CustomersPage() {
                     onClick={() => navigate(`/dashboard/customers/${encodeURIComponent(c.id)}`)}
                   >
                     <TableCell className="ps-5">
-                      <Link className="font-medium hover:text-sol-green" onClick={(e) => e.stopPropagation()} to={`/dashboard/customers/${encodeURIComponent(c.id)}`}>
+                      <Link className="font-medium hover:text-primary" onClick={(e) => e.stopPropagation()} to={`/dashboard/customers/${encodeURIComponent(c.id)}`}>
                         {c.name || c.id}
                       </Link>
                       {c.name && <div className="text-[11px] text-muted-foreground">{c.id}</div>}
@@ -80,7 +80,7 @@ export function CustomersPage() {
                       <div className="flex flex-wrap gap-1.5">
                         {c.plans.length === 0 &&
                           (isWalletCustomer(c.id) ? (
-                            <span className="inline-flex items-center border border-sol-purple/50 px-1.5 py-0.5 text-sol-purple text-xs">Agent · pays per request</span>
+                            <span className="label-mono inline-flex items-center rounded-full bg-iris px-2 py-0.5 text-[10px] text-ink">Agent · pays per request</span>
                           ) : (
                             <span className="text-muted-foreground text-xs">none</span>
                           ))}
