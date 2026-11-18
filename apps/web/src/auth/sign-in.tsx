@@ -39,6 +39,7 @@ export function SignInPage() {
       subtitle="Sign in to your billing dashboard."
       title="Welcome back"
     >
+      {params.get("reset") && <p className="mb-4 rounded-md border border-sol-green/40 bg-sol-green/10 px-3 py-2 text-xs">Password changed. Sign in with the new one.</p>}
       <SocialButtons next={next} />
       <form className="grid gap-4" onSubmit={submit}>
         <div className="grid gap-2">
@@ -46,7 +47,12 @@ export function SignInPage() {
           <Input autoComplete="email" className="h-10" id="email" onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" required type="email" value={email} />
         </div>
         <div className="grid gap-2">
-          <Label htmlFor="password">Password</Label>
+          <div className="flex items-center justify-between">
+            <Label htmlFor="password">Password</Label>
+            <Link className="text-muted-foreground text-xs underline-offset-4 hover:text-foreground hover:underline" to={`/forgot-password${email ? `?email=${encodeURIComponent(email)}` : ""}`}>
+              Forgot password?
+            </Link>
+          </div>
           <Input autoComplete="current-password" className="h-10" id="password" onChange={(e) => setPassword(e.target.value)} required type="password" value={password} />
         </div>
         {error && <p className="text-destructive text-xs">{error}</p>}

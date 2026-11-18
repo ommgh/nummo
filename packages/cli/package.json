@@ -1,15 +1,46 @@
 {
-  "name": "@usenummo/cli",
-  "version": "0.0.0",
+  "name": "nummo",
+  "version": "0.1.0",
+  "description": "The nummo CLI: log in, scaffold a pricing config, push it, publish plans on Solana, create devnet wallets, inspect customers, and verify billing records against the chain.",
   "license": "Apache-2.0",
-  "private": true,
   "type": "module",
-  "description": "The nummo CLI: log in, scaffold a config, push pricing, publish plans on-chain, create devnet wallets, inspect customers, verify against the chain. Published later as the unscoped `nummo` package.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ommgh/nummo.git"
+  },
+  "homepage": "https://github.com/ommgh/nummo#readme",
+  "bugs": "https://github.com/ommgh/nummo/issues",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "keywords": [
+    "billing",
+    "usage-based-billing",
+    "metering",
+    "credits",
+    "entitlements",
+    "solana",
+    "stablecoin",
+    "usdc",
+    "subscriptions"
+  ],
   "bin": {
     "nummo": "./src/main.ts"
   },
-  "exports": {
-    ".": "./src/main.ts"
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node ../../scripts/build-packages.ts cli",
+    "prepack": "node ../../scripts/build-packages.ts cli"
+  },
+  "publishConfig": {
+    "access": "public",
+    "bin": {
+      "nummo": "./dist/main.js"
+    }
   },
   "dependencies": {
     "@solana/kit": "^7.1.1",

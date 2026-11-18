@@ -21,7 +21,8 @@
     "nummo": "node --env-file-if-exists=.env packages/cli/src/main.ts",
     "e2e:devnet": "node --env-file-if-exists=.env e2e/devnet.ts",
     "dev:web": "pnpm --filter @usenummo/web dev",
-    "build:web": "pnpm --filter @usenummo/web build"
+    "build:web": "pnpm --filter @usenummo/web build",
+    "build:packages": "node scripts/build-packages.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

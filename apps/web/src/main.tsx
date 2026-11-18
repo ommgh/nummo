@@ -10,6 +10,10 @@ import "./index.css";
 const Landing = lazy(() => import("@/site/landing").then((m) => ({ default: m.Landing })));
 const SignIn = lazy(() => import("@/auth/sign-in").then((m) => ({ default: m.SignInPage })));
 const SignUp = lazy(() => import("@/auth/sign-up").then((m) => ({ default: m.SignUpPage })));
+const ForgotPassword = lazy(() => import("@/auth/reset-password").then((m) => ({ default: m.ForgotPasswordPage })));
+const ResetPassword = lazy(() => import("@/auth/reset-password").then((m) => ({ default: m.ResetPasswordPage })));
+const Terms = lazy(() => import("@/site/legal").then((m) => ({ default: m.TermsPage })));
+const Privacy = lazy(() => import("@/site/legal").then((m) => ({ default: m.PrivacyPage })));
 const Onboarding = lazy(() => import("@/auth/onboarding").then((m) => ({ default: m.OnboardingPage })));
 const DashboardRoot = lazy(() => import("@/dashboard/root").then((m) => ({ default: m.DashboardRoot })));
 const page = (load: () => Promise<Record<string, unknown>>, name: string) => async () => ({ Component: (await load())[name] as React.ComponentType });
@@ -25,7 +29,11 @@ const router = createBrowserRouter([
       { path: "/", element: <Landing /> },
       { path: "/sign-in", element: <SignIn /> },
       { path: "/sign-up", element: <SignUp /> },
+      { path: "/forgot-password", element: <ForgotPassword /> },
+      { path: "/reset-password", element: <ResetPassword /> },
       { path: "/onboarding", element: <Onboarding /> },
+      { path: "/terms", element: <Terms /> },
+      { path: "/privacy", element: <Privacy /> },
       {
         path: "/dashboard",
         element: <DashboardRoot />,

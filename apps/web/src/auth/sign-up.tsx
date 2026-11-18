@@ -60,6 +60,17 @@ export function SignUpPage() {
         <Button className="h-10" disabled={busy} type="submit">
           {busy ? "Creating…" : "Create account"}
         </Button>
+        <p className="text-[11px] text-muted-foreground">
+          By creating an account you agree to the{" "}
+          <Link className="underline underline-offset-4 hover:text-foreground" target="_blank" to="/terms">
+            Terms
+          </Link>{" "}
+          and{" "}
+          <Link className="underline underline-offset-4 hover:text-foreground" target="_blank" to="/privacy">
+            Privacy Policy
+          </Link>
+          .
+        </p>
       </form>
     </AuthLayout>
   );

@@ -1,12 +1,49 @@
 {
   "name": "@usenummo/config",
-  "version": "0.0.0",
-  "license": "Apache-2.0",
-  "private": true,
-  "type": "module",
+  "version": "0.1.0",
   "description": "feature() and plan() builders, and validation of the pricing config document.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ommgh/nummo.git"
+  },
+  "homepage": "https://github.com/ommgh/nummo#readme",
+  "bugs": "https://github.com/ommgh/nummo/issues",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "keywords": [
+    "billing",
+    "usage-based-billing",
+    "metering",
+    "credits",
+    "entitlements",
+    "solana",
+    "stablecoin",
+    "usdc",
+    "subscriptions"
+  ],
   "exports": {
     ".": "./src/index.ts"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node ../../scripts/build-packages.ts config",
+    "prepack": "node ../../scripts/build-packages.ts config"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
   },
   "dependencies": {
     "@usenummo/core": "workspace:*",

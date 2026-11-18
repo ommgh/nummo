@@ -7,15 +7,22 @@
  * (org_…) and the orgs row with the same id is created alongside it, so API
  * keys, customers and plans hang off the organization people sign in to.
  *
+ * Password resets are emailed through ./mail.ts (RESEND_API_KEY or SMTP_URL,
+ * and MAIL_FROM). Better Auth rate-limits its own routes in production (three
+ * sign-in attempts per 10 seconds and three reset requests per minute, per IP).
+ *
  * Settings: BETTER_AUTH_SECRET (required in production, 32+ random bytes),
  * GITHUB_CLIENT_ID/GITHUB_CLIENT_SECRET, GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET,
- * NUMMO_TRUSTED_ORIGINS (comma-separated, extra origins allowed to call it).
+ * NUMMO_TRUSTED_ORIGINS (comma-separated, extra origins allowed to call it),
+ * NUMMO_CLIENT_IP_HEADER (see ./rate-limit.ts).
  */
 
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { organization } from "better-auth/plugins";
 import { type Db, ensureOrg, firstOrganization, newId, renameOrg, schema } from "@usenummo/db";
+import { createMailer, type Mailer, passwordResetMail } from "./mail.ts";
+import { clientIpHeader } from "./rate-limit.ts";
 
 const ID_PREFIX: Record<string, string> = {
   user: "usr",
@@ -27,8 +34,9 @@ const ID_PREFIX: Record<string, string> = {
   invitation: "inv",
 };
 
-export function createAuth(db: Db, opts: { publicUrl: string; env?: NodeJS.ProcessEnv }) {
+export function createAuth(db: Db, opts: { publicUrl: string; env?: NodeJS.ProcessEnv; mailer?: Mailer }) {
   const env = opts.env ?? process.env;
+  const mailer = opts.mailer ?? createMailer(env);
   const social: Record<string, { clientId: string; clientSecret: string }> = {};
   if (env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET) social.github = { clientId: env.GITHUB_CLIENT_ID, clientSecret: env.GITHUB_CLIENT_SECRET };
   if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) social.google = { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET };
@@ -56,12 +64,28 @@ export function createAuth(db: Db, opts: { publicUrl: string; env?: NodeJS.Proce
         invitation: schema.authInvitations,
       },
     }),
-    emailAndPassword: { enabled: true, minPasswordLength: 10, autoSignIn: true },
+    emailAndPassword: {
+      enabled: true,
+      minPasswordLength: 10,
+      autoSignIn: true,
+      resetPasswordTokenExpiresIn: 3600,
+      // A reset signs every device out, so a stolen session dies with the old password.
+      revokeSessionsOnPasswordReset: true,
+      sendResetPassword: async ({ user, url }) => {
+        try {
+          await mailer.send(passwordResetMail({ to: user.email, name: user.name, url }));
+        } catch (err) {
+          // Logged, not thrown: the response must not reveal whether the address has an account.
+          console.error("[mail] password reset email failed:", err);
+        }
+      },
+    },
     socialProviders: social,
     session: { expiresIn: 7 * 86_400, updateAge: 86_400 },
     advanced: {
       database: { generateId: ({ model }) => newId(ID_PREFIX[model] ?? model.slice(0, 3)) },
       cookiePrefix: "nummo",
+      ipAddress: { ipAddressHeaders: [clientIpHeader(env)] },
     },
     databaseHooks: {
       session: {

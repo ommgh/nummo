@@ -6,6 +6,7 @@
 
 import { sql } from "drizzle-orm";
 import { clock, type Db } from "@usenummo/db";
+import type { Alerts } from "./alerts.ts";
 import type { Chains } from "./chains.ts";
 import { resolveSubmittedCheckouts } from "./checkout.ts";
 import { reconcileAll } from "./reconcile.ts";
@@ -48,6 +49,10 @@ export type WorkerOptions = {
   settleEveryMs?: number;
   reconcileEveryMs?: number;
   dispatchEveryMs?: number;
+  /** How often to check the pullers' SOL balances. Default 5 minutes. */
+  alertEveryMs?: number;
+  /** Operational alerts and the heartbeat (./alerts.ts). */
+  alerts?: Alerts;
   log?: (msg: string, data?: unknown) => void;
   signal?: AbortSignal;
 };
@@ -61,8 +66,11 @@ export async function runWorker(db: Db, chains: Chains, settings: SettlementSett
       try {
         const r = await fn();
         if (r && typeof r === "object" && hasNews(r)) log(name, r);
+        await opts.alerts?.loopResult(name, null);
+        if (name === "settle") await opts.alerts?.heartbeat();
       } catch (e) {
         log(`${name} failed`, { error: (e as Error).message });
+        await opts.alerts?.loopResult(name, e as Error);
       }
       const wait = Math.max(everyMs - (Date.now() - started), 250);
       await new Promise((res) => {
@@ -75,6 +83,7 @@ export async function runWorker(db: Db, chains: Chains, settings: SettlementSett
     loop("settle", opts.settleEveryMs ?? 10_000, () => settlementTick(db, chains, settings)),
     loop("reconcile", opts.reconcileEveryMs ?? 120_000, () => reconcileTick(db, chains)),
     loop("dispatch", opts.dispatchEveryMs ?? 2_000, () => dispatchTick(db)),
+    ...(opts.alerts ? [loop("alerts", opts.alertEveryMs ?? 300_000, () => opts.alerts!.checkPullers(chains))] : []),
   ]);
 }
 

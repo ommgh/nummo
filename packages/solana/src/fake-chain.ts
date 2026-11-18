@@ -181,6 +181,11 @@ export class FakeChain implements Chain {
     const a = this.authorities.get(owner);
     return a ? { ...a } : null;
   }
+  /** SOL balances in lamports by owner; an owner with no entry holds 1 SOL. */
+  readonly solBalances = new Map<string, bigint>();
+  async getSolBalance(owner: string) {
+    return this.solBalances.get(owner) ?? 1_000_000_000n;
+  }
   async getTokenBalance(owner: string) {
     return this.balances.get(owner) ?? null;
   }

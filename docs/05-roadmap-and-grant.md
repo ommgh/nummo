@@ -112,14 +112,14 @@ Done-when status:
 | --- | --- |
 | A stranger charges a devnet wallet in under 30 minutes | The [quickstart](guide/quickstart.md) is written and its CLI steps were run on a fresh database; the on-chain steps are the ones `e2e/devnet-m3.ts` exercises. Not yet tried by someone new. |
 | The demo runs on mainnet with real USDC at small amounts | Not done. The code is ready (live keys, mainnet USDC by default, priority fee, the checklist in [deploy.md](guide/deploy.md)); it needs a funded mainnet puller, a merchant wallet and a hosting decision. |
-| Public repository with a licence, a README and a recorded walkthrough | Licence and README done. Making the repository public and recording the walkthrough with a real wallet are still to do. |
+| Public repository with a licence, a README and a recorded walkthrough | Licence and README done; the repository is public (since 2026-11-17) and the packages are ready for npm. The recorded walkthrough with a real wallet is still to do. |
 
 Differences from the plan, decided during the build:
 
 - **No Next.js app.** The portal and dashboard are server-rendered by the API like the M2 checkout, with no bundler.
 - **Upgrades cancel at period end on-chain.** `cancelSubscriptionNow` needs the merchant's key, so the old subscription is cancelled by the customer in the same transaction and winds down: no entitlements, overage still collected, never renewed.
 - **Downgrades to a paid plan are signed at the period end**, because a subscription's periods start when it is signed.
-- **No documentation site yet.** The guide is Markdown in `docs/guide`, readable on GitHub; a hosted site can come with the public repository.
+- **No documentation site yet.** The guide is Markdown in `docs/guide`, readable on GitHub in the public repository; a hosted site can come later.
 
 ### M4. Agents and design partners (about 2 weeks)
 

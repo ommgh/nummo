@@ -8,6 +8,10 @@ Open-source usage billing and entitlements, settled in stablecoins on Solana. Pl
 
 ## In your backend
 
+```bash
+npm install @usenummo/sdk @usenummo/config   # Node 22.18+
+```
+
 ```ts
 import { Nummo } from "@usenummo/sdk";
 const nummo = new Nummo(); // reads NUMMO_SECRET_KEY and NUMMO_API_URL
@@ -19,7 +23,7 @@ const { checkoutUrl } = await nummo.attach({ customerId: "user_123", planId: "pr
 const { url } = await nummo.portal({ customerId: "user_123", returnUrl: "https://app.example/settings" }); // billing portal
 ```
 
-Pricing is code (`nummo.config.ts`), applied with `nummo push`. Each paid plan version becomes one on-chain plan whose amount is its ceiling: base price plus overage cap plus automatic top-ups.
+Pricing is code (`nummo.config.ts`), applied with `npx nummo push`. Each paid plan version becomes one on-chain plan whose amount is its ceiling: base price plus overage cap plus automatic top-ups.
 
 ## Running it
 
@@ -48,12 +52,13 @@ Settlement needs a puller wallet in `NUMMO_TEST_PULLER_KEY` (see [.env.example](
 | `packages/settlement` | Checkout, the settlement worker (renewals, overage, refills, safe resend), the failed-payment state machine, the reconciler, `verify`, the webhook dispatcher, and the customer portal. |
 | `packages/agents` | Agent payments: Solana's `@solana/pay-kit` (x402 and MPP) in the API process, the puller as fee payer, a Postgres replay store, and recording paid requests in the ledger. |
 | `packages/sdk` | TypeScript client. Fails open; queued `track` calls carry idempotency keys so a resend never double counts. `paywall` for agents (Hono middleware or fetch wrapper), `trackTokens` and `checkTokens` for model calls, `verifyWebhook` for receivers. |
-| `packages/cli` | `nummo login`, `init`, `push`, `plans`, `plans publish`, `wallet`, `customers`, `preview`, `attach`, `portal`, `verify`. Run with `pnpm nummo`. |
+| `packages/cli` | `nummo login`, `init`, `push`, `plans`, `plans publish`, `wallet`, `customers`, `preview`, `attach`, `portal`, `verify`. Run with `pnpm nummo` here, `npx nummo` elsewhere (published as `nummo`). |
 | `apps/api` | Hono HTTP API (`/v1/...`), the hosted checkout (`/checkout/:id`), customer portal (`/portal/:id`), the dashboard's JSON API (`/dashboard/api`), accounts with Better Auth (`/api/auth`), and the built web app. |
 | `apps/web` | The website (`/`) and merchant dashboard (`/dashboard`): React, Vite, Tailwind and shadcn/ui, with efferd's dashboard blocks and React Bits effects. |
 | `apps/worker` | Runs settlement, reconciliation and webhook delivery on their own cadences. |
 | `apps/demo` | AI chat demo that gates messages on credits, upgrades through checkout, buys credits, and opens the portal; `/agent/chat` for agents paying per request, `/api/complete` priced per token, and `src/agent.ts`, an agent that pays. |
 | `e2e` | Scripted devnet scenarios: `devnet.ts` (M2), `devnet-m3.ts` (M3) and `devnet-m4.ts` (M4). |
+| `scripts` | `build-packages.ts` (builds the npm packages to `dist/`) and `backup/` (the nightly off-site database dump and its restore script). |
 | `spikes` | Throwaway devnet experiments (S1 to S3). |
 
 ## Tests
@@ -72,6 +77,19 @@ node e2e/checkout-page.ts      # serves a live devnet checkout on :8790 for a br
 ```
 
 The db suite and the devnet scripts use their own databases (`nummo_test`, `nummo_e2e`), created on first run, because a worker settles every org in an environment.
+
+## Publishing the packages
+
+Five packages go to npm: `@usenummo/core`, `@usenummo/config`, `@usenummo/sdk`, `@usenummo/solana`, and the CLI as `nummo`. The rest (db, settlement, agents, the apps) are the server, which you run from this repository. Inside the workspace everything runs from `src/`; `pnpm build:packages` writes each package's `dist/` (JavaScript and type declarations), and `publishConfig` points the published copies at it.
+
+```bash
+npm login                          # once; the @usenummo scope needs a free npm organization named usenummo
+pnpm build:packages
+pnpm -r publish --dry-run          # lists each tarball's files
+pnpm -r publish                    # in dependency order; replaces workspace:* with real versions
+```
+
+To release again, bump `version` in the five `package.json` files (keep them equal) and repeat.
 
 ## Licence
 

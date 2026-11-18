@@ -53,7 +53,7 @@ export function webApp(dir: string | null = DEFAULT_WEB_DIR) {
     });
   });
 
-  for (const path of ["/", "/sign-in", "/sign-up", "/onboarding"]) app.get(path, page());
+  for (const path of ["/", "/sign-in", "/sign-up", "/onboarding", "/forgot-password", "/reset-password", "/terms", "/privacy"]) app.get(path, page());
   app.get("/dashboard", page());
   app.get("/dashboard/*", page());
   return app;

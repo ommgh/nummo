@@ -103,7 +103,7 @@ pnpm nummo attach alice pro    # prints a checkout link; open it in the browser
 
 - [Billing flows](billing-flows.md): upgrades, downgrades, top-ups, failed payments, webhooks.
 - [Self-hosting and mainnet](deploy.md): Docker, settings, and the checklist before real money.
-- Integrate the SDK in your own backend: `check` before an action, `track` after it, `attach` to sell a plan. The demo's `apps/demo/src/server.ts` is about 60 lines of it.
+- Integrate the SDK in your own backend: `npm install @usenummo/sdk @usenummo/config`, then `check` before an action, `track` after it, `attach` to sell a plan. The demo's `apps/demo/src/server.ts` is about 60 lines of it. Outside this repository the CLI is `npx nummo`.
 
 ## When something goes wrong
 

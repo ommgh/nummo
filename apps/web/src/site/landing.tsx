@@ -708,11 +708,11 @@ function FinalCta() {
   );
 }
 
-function Footer() {
+export function Footer() {
   const cols = [
-    { title: "Product", links: [["How it works", "#how"], ["Pricing models", "#models"], ["Features", "#features"], ["Dashboard", "/dashboard"]] },
+    { title: "Product", links: [["How it works", "/#how"], ["Pricing models", "/#models"], ["Features", "/#features"], ["Dashboard", "/dashboard"]] },
     { title: "Developers", links: [["Quickstart", `${DOCS}/quickstart.md`], ["Pricing config", `${DOCS}/pricing-config.md`], ["Billing flows", `${DOCS}/billing-flows.md`], ["Self-hosting", `${DOCS}/deploy.md`]] },
-    { title: "Project", links: [["GitHub", GITHUB], ["Settlement design", `${GITHUB}/blob/master/docs/03-solana-settlement.md`], ["Licence (Apache-2.0)", `${GITHUB}/blob/master/LICENSE`]] },
+    { title: "Project", links: [["GitHub", GITHUB], ["Settlement design", `${GITHUB}/blob/master/docs/03-solana-settlement.md`], ["Licence (Apache-2.0)", `${GITHUB}/blob/master/LICENSE`], ["Terms of Service", "/terms"], ["Privacy Policy", "/privacy"]] },
   ];
   return (
     <footer>
@@ -727,7 +727,7 @@ function Footer() {
             <ul className="grid gap-2 text-sm">
               {c.links.map(([label, href]) => (
                 <li key={label}>
-                  {href!.startsWith("/") ? (
+                  {href!.startsWith("/") && !href!.startsWith("/#") ? (
                     <Link className="hover:text-sol-green" to={href!}>
                       {label}
                     </Link>

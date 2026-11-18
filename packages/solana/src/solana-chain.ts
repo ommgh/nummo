@@ -226,6 +226,11 @@ export class SolanaChain implements Chain {
     return acc.exists ? { address: pda, initId: acc.data.initId } : null;
   }
 
+  async getSolBalance(owner: string): Promise<bigint> {
+    const { value } = await rl(() => this.rpc.getBalance(address(owner), { commitment: "confirmed" }).send());
+    return BigInt(value);
+  }
+
   async getTokenBalance(owner: string): Promise<bigint | null> {
     const ata = await this.ata(owner);
     try {

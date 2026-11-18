@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "rootDir": "src",
+    "outDir": "dist",
+    "paths": {
+      "@usenummo/config": ["../config/dist/index.d.ts"],
+      "@usenummo/core": ["../core/dist/index.d.ts"],
+      "@usenummo/sdk": ["../sdk/dist/index.d.ts"],
+      "@usenummo/solana": ["../solana/dist/index.d.ts"]
+    }
+  },
+  "include": ["src"]
+}

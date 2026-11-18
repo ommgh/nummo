@@ -136,6 +136,8 @@ export interface Chain {
   getAuthority(owner: string): Promise<OnchainAuthority | null>;
   /** Balance of `owner`'s associated token account for `mint`, or null if it does not exist. */
   getTokenBalance(owner: string): Promise<bigint | null>;
+  /** SOL balance of `owner` in lamports (the puller's, for low-balance alerts). */
+  getSolBalance(owner: string): Promise<bigint>;
   findPlanAddress(owner: string, planId: bigint): Promise<string>;
   findSubscriptionAddress(planAddress: string, subscriber: string): Promise<string>;
 

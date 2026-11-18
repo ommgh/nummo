@@ -1,13 +1,54 @@
 {
   "name": "@usenummo/solana",
-  "version": "0.0.0",
-  "license": "Apache-2.0",
-  "private": true,
-  "type": "module",
+  "version": "0.1.0",
   "description": "Settlement adapter for Solana's Subscriptions program: build, send and confirm transactions; read accounts.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ommgh/nummo.git"
+  },
+  "homepage": "https://github.com/ommgh/nummo#readme",
+  "bugs": "https://github.com/ommgh/nummo/issues",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "keywords": [
+    "billing",
+    "usage-based-billing",
+    "metering",
+    "credits",
+    "entitlements",
+    "solana",
+    "stablecoin",
+    "usdc",
+    "subscriptions"
+  ],
   "exports": {
     ".": "./src/index.ts",
     "./testing": "./src/fake-chain.ts"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node ../../scripts/build-packages.ts solana",
+    "prepack": "node ../../scripts/build-packages.ts solana"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./testing": {
+        "types": "./dist/fake-chain.d.ts",
+        "default": "./dist/fake-chain.js"
+      }
+    }
   },
   "dependencies": {
     "@solana-program/compute-budget": "^0.20.0",

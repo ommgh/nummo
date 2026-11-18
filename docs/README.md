@@ -1,6 +1,6 @@
 # nummo: usage-based billing on Solana stablecoin rails
 
-Name: `nummo` (decided 2026-11-17; the working name was `bill`). Last updated: 2026-11-18. Status: milestones M1 (ledger core) and M2 (settlement on devnet) built; M3 (product surface) built and passed on devnet, with its mainnet run, public repository and recorded walkthrough still to do; M4 (agent payments over x402 and MPP, per-model token pricing) built and passed on devnet, with design-partner integrations still to do. See the repository [README](../README.md). Spikes S1 and S2 passed on devnet. To use nummo, start with the [guide](guide/README.md).
+Name: `nummo` (decided 2026-11-17; the working name was `bill`). Last updated: 2026-11-18. Status: milestones M1 (ledger core) and M2 (settlement on devnet) built; M3 (product surface) built and passed on devnet, with its mainnet run and recorded walkthrough still to do (the repository is public since 2026-11-17); M4 (agent payments over x402 and MPP, per-model token pricing) built and passed on devnet, with design-partner integrations still to do. See the repository [README](../README.md). Spikes S1 and S2 passed on devnet. To use nummo, start with the [guide](guide/README.md).
 
 ## Summary
 
@@ -36,10 +36,12 @@ The [guide](guide/README.md) is for people using nummo: quickstart, pricing conf
 
 ## Start here next session
 
-1. Finish M3's done-when items, each of which needs the owner's decision or hands: make the repository public; run the demo on mainnet with real USDC at small amounts (a funded mainnet puller, a merchant wallet, and where to host it, following [guide/deploy.md](guide/deploy.md)); record the walkthrough with a real wallet extension (Phantom, Solflare or Backpack on devnet).
+1. Finish M3's done-when items, each of which needs the owner's hands: publish the npm packages (`pnpm build:packages`, then `pnpm -r publish`; see the root README); run the demo on mainnet with real USDC at small amounts (a funded mainnet puller, a merchant wallet, and where to host it, following [guide/deploy.md](guide/deploy.md)); record the walkthrough with a real wallet extension (Phantom, Solflare or Backpack on devnet).
 2. Ask someone new to follow the [quickstart](guide/quickstart.md) and time it.
 3. M4 is built (see the [M4 results](05-roadmap-and-grant.md#m4-results-2026-11-18)); what is left is two or three design partners integrating on devnet. Possible follow-ups: MPP `session` / x402 `upto` for metered agent calls, and agents with a prepaid balance.
 4. Finish spike S3 (decode program events) when moving the reconciler from polling to events.
+
+Done on 2026-11-18, for launch readiness: the published packages (`@usenummo/core`, `config`, `sdk`, `solana`, and the CLI as `nummo`) build to `dist/` and were tested from packed tarballs in a fresh project; password reset by email (Resend or any SMTP server); API rate limits; worker alerts (low puller SOL, failing loops) and a heartbeat; `/health/deep`; Railway volume backups (daily and weekly) plus a nightly off-site dump job in `scripts/backup`; Terms of Service and Privacy Policy pages. See [guide/deploy.md](guide/deploy.md).
 
 Done on 2026-11-17: S1 answered from the program source and its tests (D3 holds); monorepo scaffolded; M1 built; M2 built and its devnet scenarios passed; M3 built (plan changes with proration, scheduled downgrades, one-off and automatic top-ups, customer portal, merchant dashboard, CLI and SDK additions, Docker, mainnet settings, the guide) and its devnet scenarios passed (see the M3 results in [05-roadmap-and-grant.md](05-roadmap-and-grant.md#m3-results-2026-11-17)).
 

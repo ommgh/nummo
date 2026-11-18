@@ -5,7 +5,7 @@
  */
 
 import { Hono } from "hono";
-import type { Context } from "hono";
+import type { Context, MiddlewareHandler } from "hono";
 import { z } from "zod";
 import { AgentPayments } from "@usenummo/agents";
 import {
@@ -56,6 +56,7 @@ import { PORTAL_PAGE } from "./portal-page.ts";
 import { dashboardApi } from "./dashboard.ts";
 import { webApp } from "./web.ts";
 import { type Auth, createAuth } from "./auth.ts";
+import { clientIp, clientIpHeader, limitByIp, limited, type RateLimits, rateLimitsFromEnv, TokenBuckets } from "./rate-limit.ts";
 
 const decimal = z.string().regex(/^\d+(\.\d{1,9})?$/, "a non-negative decimal string with up to 9 places");
 /** Amounts in requests are integer strings of token base units (doc 04): "10000000" is 10 USDC. */
@@ -166,6 +167,8 @@ export type AppOptions = {
   auth?: Auth;
   /** x402 and MPP payments per request. Without it, /v1/pay answers settlement_unavailable. */
   agents?: AgentPayments;
+  /** Request limits (./rate-limit.ts); read from the environment when omitted, false turns them off. */
+  rateLimits?: RateLimits | false;
 };
 
 export function createApp(db: Db, opts: AppOptions = {}) {
@@ -180,6 +183,7 @@ export function createApp(db: Db, opts: AppOptions = {}) {
 
   app.onError((err, c) => {
     if (err instanceof NummoError) {
+      if (err.code === "rate_limited") c.header("Retry-After", String((err.details as { retryAfter?: number })?.retryAfter ?? 1));
       return c.json({ error: { code: err.code, message: err.message, ...(err.details ? { details: err.details } : {}) } }, err.status as 400);
     }
     console.error(err);
@@ -188,6 +192,31 @@ export function createApp(db: Db, opts: AppOptions = {}) {
   app.notFound((c) => c.json({ error: { code: "not_found", message: `no route for ${c.req.method} ${c.req.path}` } }, 404));
 
   app.get("/health", (c) => c.json({ ok: true }));
+  // For uptime monitors: also proves the database answers. /health stays cheap for the platform's deploy check.
+  app.get("/health/deep", async (c) => {
+    const started = Date.now();
+    try {
+      await (db as unknown as { $client: { query(q: string): Promise<unknown> } }).$client.query("select 1");
+      return c.json({ ok: true, db: "ok", dbMs: Date.now() - started });
+    } catch (err) {
+      console.error("health/deep: database check failed", err);
+      return c.json({ ok: false, db: "down" }, 503);
+    }
+  });
+
+  const limits = opts.rateLimits ?? rateLimitsFromEnv();
+  const ipHeader = clientIpHeader();
+  const apiBuckets = limits ? new TokenBuckets(limits.api) : null;
+  const badKeyBuckets = limits ? new TokenBuckets(limits.badKey) : null;
+  if (limits) {
+    const read = limitByIp(new TokenBuckets(limits.public), ipHeader);
+    const write = limitByIp(new TokenBuckets(limits.chain), ipHeader);
+    const publicPages: MiddlewareHandler = (c, next) => (c.req.method === "POST" ? write(c, next) : read(c, next));
+    app.use("/checkout/*", publicPages);
+    app.use("/portal/*", publicPages);
+    app.use("/p/*", read);
+    app.use("/dashboard/api/*", limitByIp(new TokenBuckets(limits.dashboard), ipHeader));
+  }
 
   // ---------------------------------------------------------------- hosted checkout (public, keyed by session id)
 
@@ -240,7 +269,14 @@ export function createApp(db: Db, opts: AppOptions = {}) {
     const header = c.req.header("authorization") ?? "";
     const key = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
     const scope = key ? await resolveApiKey(db, key) : null;
-    if (!scope) throw new NummoError("unauthorized", "missing or invalid API key");
+    if (!scope) {
+      // Wrong keys are counted per IP; a valid key is never held back by them.
+      const wait = badKeyBuckets?.take(clientIp(c, ipHeader));
+      if (wait) limited(wait);
+      throw new NummoError("unauthorized", "missing or invalid API key");
+    }
+    const wait = apiBuckets?.take(`${scope.orgId}:${scope.env}`);
+    if (wait) limited(wait);
     c.set("scope", scope);
     await next();
   });

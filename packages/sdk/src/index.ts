@@ -145,10 +145,18 @@ export class Nummo {
       throw new NummoUnavailableError(`nummo API unreachable: ${(e as Error).message}`, { cause: e });
     }
     const text = await res.text();
-    const json = text ? JSON.parse(text) : {};
+    // Not always JSON: a proxy in front of the API can answer 502 or 429 with an HTML page.
+    let json: { error?: { code?: string; message?: string } } | null = null;
+    try {
+      json = text ? JSON.parse(text) : {};
+    } catch {
+      if (res.ok) throw new NummoUnavailableError(`nummo API returned a body that is not JSON (status ${res.status})`);
+    }
     // 501 (not built yet) and settlement_unavailable (not configured) are definite answers, not outages,
     // so they must not fail open.
     const definite = res.status === 501 || json?.error?.code === "settlement_unavailable";
+    // A 429 is temporary too: check fails open and track is queued and resent with its idempotency key.
+    if (res.status === 429) throw new NummoUnavailableError(`nummo API rate limit: ${json?.error?.message ?? text}`);
     if (res.status >= 500 && !definite) throw new NummoUnavailableError(`nummo API error ${res.status}: ${json?.error?.message ?? text}`);
     if (!res.ok) throw new NummoApiError(res.status, json?.error?.code ?? "unknown", json?.error?.message ?? text);
     return json as T;

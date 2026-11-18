@@ -6,3 +6,6 @@ dist
 .keys
 *.state.json
 keys/
+
+# core dumps
+core.[0-9]*
